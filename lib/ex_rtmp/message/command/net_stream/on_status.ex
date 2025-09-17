@@ -1,4 +1,4 @@
-defmodule ExRTMP.Command.NetStream.OnStatus do
+defmodule ExRTMP.Message.Command.NetStream.OnStatus do
   @moduledoc false
 
   @type level :: :status | :error | :warning
@@ -21,7 +21,17 @@ defmodule ExRTMP.Command.NetStream.OnStatus do
   @spec publish_ok() :: t()
   def publish_ok(), do: new("NetStream.Publish.Start")
 
-  defimpl ExRTMP.Command.Serializer do
+  @spec publish_bad_stream() :: t()
+  def publish_bad_stream() do
+    new("NetStream.Publish.BadStream", :error, "Unknown stream")
+  end
+
+  @spec publish_failed(String.t()) :: t()
+  def publish_failed(reason) do
+    new("NetStream.Publish.Failed", :error, reason)
+  end
+
+  defimpl ExRTMP.Message.Serializer do
     alias ExRTMP.AMF0
 
     def serialize(command) do

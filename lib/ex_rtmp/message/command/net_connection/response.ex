@@ -1,4 +1,4 @@
-defmodule ExRTMP.Command.NetConnection.Response do
+defmodule ExRTMP.Message.Command.NetConnection.Response do
   @moduledoc """
   Module describing command response
   """
@@ -20,7 +20,30 @@ defmodule ExRTMP.Command.NetConnection.Response do
     struct(%__MODULE__{result: "_result", transaction_id: transaction_id}, opts)
   end
 
-  defimpl ExRTMP.Command.Serializer do
+  @spec connect_failed(String.t()) :: t()
+  def connect_failed(reason) do
+    error(1, "NetConnection.Connect.Failed", reason)
+  end
+
+  @spec create_stream_failed(number(), String.t()) :: t()
+  def create_stream_failed(transaction_id, reason) do
+    error(transaction_id, "NetConnection.CreateStream.Failed", reason)
+  end
+
+  def error(transaction_id, code, description) do
+    %__MODULE__{
+      result: "_error",
+      transaction_id: transaction_id,
+      command_object: %{},
+      data: %{
+        "level" => "error",
+        "code" => code,
+        "description" => description
+      }
+    }
+  end
+
+  defimpl ExRTMP.Message.Serializer do
     def serialize(response) do
       [
         AMF0.serialize(response.result),

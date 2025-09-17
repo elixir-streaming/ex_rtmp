@@ -1,4 +1,4 @@
-defmodule ExRTMP.Command.NetStream.DeleteStream do
+defmodule ExRTMP.Message.Command.NetStream.DeleteStream do
   @moduledoc false
 
   @type t :: %__MODULE__{

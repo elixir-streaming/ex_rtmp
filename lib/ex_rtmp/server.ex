@@ -16,19 +16,25 @@ defmodule ExRTMP.Server do
   end
 
   @impl true
-  def init(_opts) do
+  def init(opts) do
     {:ok, server_socket} =
       :gen_tcp.listen(@default_port, [:binary, packet: :raw, active: false, reuseaddr: true])
 
-    server_pid = self()
-    pid = spawn_link(fn -> accept_client_connection(server_socket, server_pid) end)
+    state = %{
+      socket: server_socket,
+      pid: self(),
+      handler: opts[:handler] || raise("Handler module is required"),
+      handler_options: opts[:handler_options]
+    }
+
+    pid = spawn_link(fn -> accept_client_connection(state) end)
 
     {:ok, %{socket: server_socket, pid: pid}}
   end
 
   @impl true
   def handle_info({:new_client, pid}, state) do
-    Process.monitor(pid)
+    _ref = Process.monitor(pid)
     {:noreply, state}
   end
 
@@ -38,11 +44,24 @@ defmodule ExRTMP.Server do
     {:noreply, state}
   end
 
-  defp accept_client_connection(server_socket, server_pid) do
-    {:ok, client_socket} = :gen_tcp.accept(server_socket)
-    {:ok, pid} = ClientSession.start(client_socket)
-    :ok = :gen_tcp.controlling_process(client_socket, pid)
-    send(server_pid, {:new_client, pid})
-    accept_client_connection(server_socket, server_pid)
+  defp accept_client_connection(state) do
+    case :gen_tcp.accept(state.socket) do
+      {:ok, client_socket} ->
+        Logger.debug("New client connected")
+
+        {:ok, pid} =
+          ClientSession.start(
+            socket: client_socket,
+            handler: state.handler,
+            handler_options: state.handler_options
+          )
+
+        :ok = :gen_tcp.controlling_process(client_socket, pid)
+        send(state.pid, {:new_client, pid})
+        accept_client_connection(state)
+
+      {:error, reason} ->
+        Logger.error("Failed to accept client connection: #{inspect(reason)}")
+    end
   end
 end

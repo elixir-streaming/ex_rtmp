@@ -1,4 +1,4 @@
-defmodule ExRTMP.Command.NetConnection.CreateStream do
+defmodule ExRTMP.Message.Command.NetConnection.Connect do
   @moduledoc """
   Module describing Connect command.
   """

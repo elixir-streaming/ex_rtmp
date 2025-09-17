@@ -1,4 +1,4 @@
-defmodule ExRTMP.Command.NetStream.Publish do
+defmodule ExRTMP.Message.Command.NetStream.Publish do
   @moduledoc false
 
   @type publishing_type :: :live | :record | :append

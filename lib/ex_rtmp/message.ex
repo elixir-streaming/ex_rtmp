@@ -5,9 +5,10 @@ defmodule ExRTMP.Message do
 
   require Logger
 
+  alias __MODULE__.Command.NetConnection.{Connect, CreateStream}
+  alias __MODULE__.Command.NetStream.{DeleteStream, Publish}
+  alias __MODULE__.Metadata
   alias ExRTMP.Chunk
-  alias ExRTMP.Command.NetConnection.{Connect, CreateStream}
-  alias ExRTMP.Command.NetStream.{DeleteStream, Publish}
 
   @type t :: %__MODULE__{
           type: non_neg_integer(),
@@ -126,12 +127,30 @@ defmodule ExRTMP.Message do
     %{msg | payload: payload}
   end
 
+  def parse_payload(%__MODULE__{type: 18, payload: payload} = msg) do
+    payload =
+      case ExRTMP.AMF0.parse(IO.iodata_to_binary(payload)) do
+        ["@setDataFrame", "onMetaData", metadata] ->
+          %Metadata{data: Map.new(metadata)}
+
+        ["onMetaData", metadata] ->
+          %Metadata{data: Map.new(metadata)}
+
+        other ->
+          Logger.warning("Unknown command: #{inspect(List.first(other))}")
+          payload
+      end
+
+    %{msg | payload: payload}
+  end
+
   def parse_payload(msg), do: msg
 
+  @spec serialize(t()) :: iodata()
   def serialize(message) do
     payload =
       if is_struct(message.payload),
-        do: ExRTMP.Command.Serializer.serialize(message.payload),
+        do: ExRTMP.Message.Serializer.serialize(message.payload),
         else: message.payload
 
     payload = IO.iodata_to_binary(payload)
