@@ -14,7 +14,7 @@ defmodule ExRTMP.Message do
           type: non_neg_integer(),
           size: non_neg_integer(),
           current_size: non_neg_integer() | nil,
-          payload: iodata() | struct(),
+          payload: iodata() | struct() | non_neg_integer(),
           timestamp: non_neg_integer(),
           stream_id: non_neg_integer()
         }
@@ -107,11 +107,6 @@ defmodule ExRTMP.Message do
     end
   end
 
-  @spec complete?(t()) :: boolean()
-  def complete?(%__MODULE__{payload: payload, size: size}) do
-    IO.iodata_length(payload) >= size
-  end
-
   @doc false
   @spec parse_payload(t()) :: t()
   def parse_payload(%__MODULE__{type: 20, payload: payload} = msg) do
@@ -152,6 +147,11 @@ defmodule ExRTMP.Message do
       end
 
     %{msg | payload: payload}
+  end
+
+  def parse_payload(%__MODULE__{type: 1, payload: payload} = msg) do
+    <<0::1, chunk_size::31>> = IO.iodata_to_binary(payload)
+    %{msg | payload: chunk_size}
   end
 
   def parse_payload(msg), do: msg

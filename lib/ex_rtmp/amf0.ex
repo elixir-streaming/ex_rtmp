@@ -20,7 +20,7 @@ defmodule ExRTMP.AMF0 do
         [<<byte_size(key)::16, key::binary>>, serialize(value)]
       end)
 
-    [0x03, pairs, 0, 0, 0]
+    [0x03, pairs, 0, 0, 9]
   end
 
   defp do_parse(<<>>, acc), do: Enum.reverse(acc)
