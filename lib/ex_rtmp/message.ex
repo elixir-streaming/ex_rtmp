@@ -137,7 +137,7 @@ defmodule ExRTMP.Message do
           %Metadata{data: Map.new(metadata)}
 
         other ->
-          Logger.warning("Unknown command: #{inspect(List.first(other))}")
+          Logger.warning("Unknown parsed metadata: #{inspect(other)}")
           payload
       end
 

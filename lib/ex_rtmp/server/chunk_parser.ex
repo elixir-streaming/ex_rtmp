@@ -6,18 +6,18 @@ defmodule ExRTMP.Server.ChunkParser do
   @type t :: %__MODULE__{
           unprocessed_data: binary(),
           messages: %{Chunk.stream_id() => Message.t()},
-          last_messages: %{Chunk.stream_id() => Message.t()},
-          chunk_size: non_neg_integer()
+          chunk_size: non_neg_integer(),
+          message_first_chunk: %{Chunk.stream_id() => tuple()}
         }
 
-  defstruct [:unprocessed_data, :messages, :last_messages, chunk_size: 128]
+  defstruct [:unprocessed_data, :messages, :message_first_chunk, chunk_size: 128]
 
   @spec new() :: t()
   def new() do
     %__MODULE__{
       unprocessed_data: <<>>,
       messages: %{},
-      last_messages: %{}
+      message_first_chunk: %{}
     }
   end
 
@@ -28,7 +28,8 @@ defmodule ExRTMP.Server.ChunkParser do
 
   defp do_process(data, parser, acc \\ []) do
     with {:ok, chunk, rest} <- Chunk.parse_header(data),
-         {chunk, payload_size} <- get_chunk_payload_size(parser, chunk),
+         {chunk, parser} <- set_missing_fields(chunk, parser),
+         payload_size <- get_chunk_payload_size(parser, chunk),
          <<payload::binary-size(payload_size), rest::binary>> <- rest do
       chunk = %{chunk | payload: payload}
       message = Map.get(parser.messages, chunk.stream_id)
@@ -37,13 +38,7 @@ defmodule ExRTMP.Server.ChunkParser do
       {parser, acc} =
         if Message.complete?(message) do
           message = Message.parse_payload(message)
-
-          parser = %{
-            parser
-            | messages: Map.delete(parser.messages, chunk.stream_id),
-              last_messages: Map.put(parser.last_messages, chunk.stream_id, message)
-          }
-
+          parser = %{parser | messages: Map.delete(parser.messages, chunk.stream_id)}
           {parser, [message | acc]}
         else
           parser = %{parser | messages: Map.put(parser.messages, chunk.stream_id, message)}
@@ -57,31 +52,51 @@ defmodule ExRTMP.Server.ChunkParser do
     end
   end
 
-  defp get_chunk_payload_size(parser, chunk) do
-    message = Map.get(parser.messages, chunk.stream_id)
-    last_message = Map.get(parser.last_messages, chunk.stream_id)
+  defp set_missing_fields(chunk, parser) when is_map_key(parser.messages, chunk.stream_id) do
+    {chunk, parser}
+  end
 
+  defp set_missing_fields(%{fmt: 0} = chunk, parser) do
+    tuple =
+      {chunk.timestamp, 0, chunk.message_length, chunk.message_type_id, chunk.message_stream_id}
+
+    message_first_chunk = Map.put(parser.message_first_chunk, chunk.stream_id, tuple)
+    {chunk, %{parser | message_first_chunk: message_first_chunk}}
+  end
+
+  defp set_missing_fields(chunk, parser) do
+    {timestamp, timestamp_delta, message_size, message_type, message_stream_id} =
+      Map.fetch!(parser.message_first_chunk, chunk.stream_id)
+
+    timestamp_delta = chunk.timestamp || timestamp_delta
+
+    chunk = %{
+      chunk
+      | timestamp: timestamp_delta + timestamp,
+        message_length: chunk.message_length || message_size,
+        message_type_id: chunk.message_type_id || message_type,
+        message_stream_id: chunk.message_stream_id || message_stream_id
+    }
+
+    message_first_chunk =
+      Map.put(
+        parser.message_first_chunk,
+        chunk.stream_id,
+        {chunk.timestamp, timestamp_delta, chunk.message_length, chunk.message_type_id,
+         chunk.message_stream_id}
+      )
+
+    {chunk, %{parser | message_first_chunk: message_first_chunk}}
+  end
+
+  defp get_chunk_payload_size(parser, chunk) do
     remaining_bytes =
-      cond do
-        not is_nil(message) -> message.size - IO.iodata_length(message.payload)
-        chunk.fmt < 2 -> chunk.message_length
-        true -> last_message.size
+      if message = Map.get(parser.messages, chunk.stream_id) do
+        message.size - IO.iodata_length(message.payload)
+      else
+        chunk.message_length
       end
 
-    payload_size = min(parser.chunk_size, remaining_bytes)
-
-    if chunk.fmt != 0 and is_nil(message) do
-      chunk = %{
-        chunk
-        | timestamp: chunk.timestamp || last_message.timestamp,
-          message_length: chunk.message_length || last_message.size,
-          message_type_id: chunk.message_type_id || last_message.type,
-          message_stream_id: chunk.message_stream_id || last_message.stream_id
-      }
-
-      {chunk, payload_size}
-    else
-      {chunk, payload_size}
-    end
+    min(parser.chunk_size, remaining_bytes)
   end
 end
