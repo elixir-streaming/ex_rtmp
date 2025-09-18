@@ -13,21 +13,23 @@ defmodule ExRTMP.Message do
   @type t :: %__MODULE__{
           type: non_neg_integer(),
           size: non_neg_integer(),
+          current_size: non_neg_integer() | nil,
           payload: iodata() | struct(),
           timestamp: non_neg_integer(),
           stream_id: non_neg_integer()
         }
 
-  defstruct [:type, :size, :payload, :timestamp, :stream_id]
+  defstruct [:type, :size, :current_size, :payload, :timestamp, :stream_id]
 
   @spec new(Chunk.t()) :: t()
   def new(%Chunk{} = chunk) do
     %__MODULE__{
       type: chunk.message_type_id,
       size: chunk.message_length,
-      payload: chunk.payload,
+      current_size: 0,
       timestamp: chunk.timestamp,
-      stream_id: chunk.message_stream_id
+      stream_id: chunk.message_stream_id,
+      payload: []
     }
   end
 
@@ -92,9 +94,17 @@ defmodule ExRTMP.Message do
     new(command, type: 20, timestamp: 0, stream_id: stream_id)
   end
 
-  @spec append_chunk(t(), Chunk.t()) :: t()
-  def append_chunk(%__MODULE__{payload: payload} = msg, chunk) do
-    %{msg | payload: [payload, chunk.payload]}
+  @spec append(t(), binary()) :: {:ok, t()} | {:more, t()}
+  def append(%__MODULE__{payload: payload} = msg, chunk_payload) do
+    current_size = msg.current_size + byte_size(chunk_payload)
+    payload = [chunk_payload | payload]
+
+    if current_size == msg.size do
+      msg = %{msg | current_size: nil, payload: Enum.reverse(payload)}
+      {:ok, parse_payload(msg)}
+    else
+      {:more, %{msg | current_size: current_size, payload: payload}}
+    end
   end
 
   @spec complete?(t()) :: boolean()

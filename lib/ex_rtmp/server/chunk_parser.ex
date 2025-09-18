@@ -31,18 +31,17 @@ defmodule ExRTMP.Server.ChunkParser do
          {chunk, parser} <- set_missing_fields(chunk, parser),
          payload_size <- get_chunk_payload_size(parser, chunk),
          <<payload::binary-size(payload_size), rest::binary>> <- rest do
-      chunk = %{chunk | payload: payload}
-      message = Map.get(parser.messages, chunk.stream_id)
-      message = (message && Message.append_chunk(message, chunk)) || Message.new(chunk)
+      message = Map.get(parser.messages, chunk.stream_id, Message.new(chunk))
 
       {parser, acc} =
-        if Message.complete?(message) do
-          message = Message.parse_payload(message)
-          parser = %{parser | messages: Map.delete(parser.messages, chunk.stream_id)}
-          {parser, [message | acc]}
-        else
-          parser = %{parser | messages: Map.put(parser.messages, chunk.stream_id, message)}
-          {parser, acc}
+        case Message.append(message, payload) do
+          {:ok, message} ->
+            parser = %{parser | messages: Map.delete(parser.messages, chunk.stream_id)}
+            {parser, [message | acc]}
+
+          {:more, message} ->
+            parser = %{parser | messages: Map.put(parser.messages, chunk.stream_id, message)}
+            {parser, acc}
         end
 
       do_process(rest, parser, acc)
@@ -91,11 +90,9 @@ defmodule ExRTMP.Server.ChunkParser do
 
   defp get_chunk_payload_size(parser, chunk) do
     remaining_bytes =
-      if message = Map.get(parser.messages, chunk.stream_id) do
-        message.size - IO.iodata_length(message.payload)
-      else
-        chunk.message_length
-      end
+      if message = Map.get(parser.messages, chunk.stream_id),
+        do: message.size - message.current_size,
+        else: chunk.message_length
 
     min(parser.chunk_size, remaining_bytes)
   end
