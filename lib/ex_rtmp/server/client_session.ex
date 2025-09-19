@@ -9,7 +9,7 @@ defmodule ExRTMP.Server.ClientSession do
   alias ExRTMP.Message
   alias ExRTMP.Message.Command.NetConnection
   alias ExRTMP.Message.Command.NetConnection.{CreateStream, Response}
-  alias ExRTMP.Message.Command.NetStream.{DeleteStream, Publish, OnStatus}
+  alias ExRTMP.Message.Command.NetStream.{DeleteStream, Play, Publish, OnStatus}
   alias ExRTMP.Message.Metadata
 
   defmodule State do
@@ -123,6 +123,9 @@ defmodule ExRTMP.Server.ClientSession do
 
         %DeleteStream{} ->
           handle_delete_stream(message.payload.stream_id, state)
+
+        %Play{} ->
+          handle_play_message(message.payload, message.stream_id, state)
 
         _other ->
           Logger.warning("Unknown command message: #{inspect(message.payload)}")
@@ -268,6 +271,39 @@ defmodule ExRTMP.Server.ClientSession do
 
           {:error, reason} ->
             {[Message.command(OnStatus.publish_failed(reason), stream_id)], state}
+        end
+    end
+  end
+
+  defp handle_play_message(play, stream_id, state) do
+    stream_state = Map.get(state.streams_state, stream_id)
+
+    cond do
+      is_nil(stream_state) ->
+        {[Message.command(OnStatus.play_bad_stream(), stream_id)], state}
+
+      stream_state != :created ->
+        message = Message.command(OnStatus.play_failed("Stream is #{stream_state}"), stream_id)
+        {[message], state}
+
+      true ->
+        case state.handler_mod.handle_play(stream_id, play, state.handler_state) do
+          {:ok, handler_state} ->
+            state = %{
+              state
+              | handler_state: handler_state,
+                streams_state: Map.put(state.streams_state, stream_id, :playing)
+            }
+
+            messages = [
+              Message.stream_begin(stream_id),
+              Message.command(OnStatus.play_ok(), stream_id)
+            ]
+
+            {messages, state}
+
+          {:error, reason} ->
+            {[Message.command(OnStatus.play_failed(reason), stream_id)], state}
         end
     end
   end

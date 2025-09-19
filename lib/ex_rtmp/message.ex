@@ -6,7 +6,7 @@ defmodule ExRTMP.Message do
   require Logger
 
   alias __MODULE__.Command.NetConnection.{Connect, CreateStream}
-  alias __MODULE__.Command.NetStream.{DeleteStream, Publish}
+  alias __MODULE__.Command.NetStream.{DeleteStream, Play, Publish}
   alias __MODULE__.Metadata
   alias ExRTMP.Chunk
 
@@ -123,6 +123,17 @@ defmodule ExRTMP.Message do
 
         ["deleteStream", transaction_id, nil, stream_id] ->
           DeleteStream.new(transaction_id, stream_id)
+
+        ["play", transaction_id, nil, stream_name | opts] ->
+          play_opts =
+            case opts do
+              [] -> []
+              [start] -> [start: start]
+              [start, duration] -> [start: start, duration: duration]
+              [start, duration, reset] -> [start: start, duration: duration, reset: reset]
+            end
+
+          Play.new(transaction_id, stream_name, play_opts)
 
         other ->
           Logger.warning("Unknown command: #{inspect(List.first(other))}")

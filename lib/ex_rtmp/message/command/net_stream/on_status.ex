@@ -31,6 +31,19 @@ defmodule ExRTMP.Message.Command.NetStream.OnStatus do
     new("NetStream.Publish.Failed", :error, reason)
   end
 
+  @spec play_ok() :: t()
+  def play_ok(), do: new("NetStream.Play.Start")
+
+  @spec play_bad_stream() :: t()
+  def play_bad_stream() do
+    new("NetStream.Play.BadStream", :error, "Unknown stream")
+  end
+
+  @spec play_failed(String.t()) :: t()
+  def play_failed(reason) do
+    new("NetStream.Play.Failed", :error, reason)
+  end
+
   defimpl ExRTMP.Message.Serializer do
     alias ExRTMP.AMF0
 
