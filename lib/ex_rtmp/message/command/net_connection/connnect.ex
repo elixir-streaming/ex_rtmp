@@ -10,4 +10,17 @@ defmodule ExRTMP.Message.Command.NetConnection.Connect do
         }
 
   defstruct [:transaction_id, :properties, :user_arguments]
+
+  defimpl ExRTMP.Message.Serializer do
+    alias ExRTMP.AMF0
+
+    def serialize(%{user_arguments: user_arguments} = connect) do
+      [
+        AMF0.serialize("connect"),
+        AMF0.serialize(connect.transaction_id),
+        AMF0.serialize(connect.properties),
+        if(user_arguments, do: AMF0.serialize(user_arguments), else: <<>>)
+      ]
+    end
+  end
 end

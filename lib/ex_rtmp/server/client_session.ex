@@ -5,12 +5,12 @@ defmodule ExRTMP.Server.ClientSession do
 
   require Logger
 
+  alias ExRTMP.ChunkParser
   alias ExRTMP.Message
-  alias ExRTMP.Message.Metadata
   alias ExRTMP.Message.Command.NetConnection
   alias ExRTMP.Message.Command.NetConnection.{CreateStream, Response}
   alias ExRTMP.Message.Command.NetStream.{DeleteStream, Publish, OnStatus}
-  alias ExRTMP.Server.ChunkParser
+  alias ExRTMP.Message.Metadata
 
   defmodule State do
     @moduledoc false

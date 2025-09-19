@@ -19,4 +19,18 @@ defmodule ExRTMP.Message.Command.NetStream.Publish do
       type: String.to_existing_atom(type)
     }
   end
+
+  defimpl ExRTMP.Message.Serializer do
+    alias ExRTMP.AMF0
+
+    def serialize(publish) do
+      [
+        AMF0.serialize("publish"),
+        AMF0.serialize(publish.transaction_id),
+        AMF0.serialize(nil),
+        AMF0.serialize(publish.name),
+        AMF0.serialize(publish.type)
+      ]
+    end
+  end
 end

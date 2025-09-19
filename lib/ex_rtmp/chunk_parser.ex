@@ -1,4 +1,4 @@
-defmodule ExRTMP.Server.ChunkParser do
+defmodule ExRTMP.ChunkParser do
   @moduledoc false
 
   alias ExRTMP.{Chunk, Message}

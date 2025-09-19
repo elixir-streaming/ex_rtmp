@@ -56,6 +56,12 @@ defmodule ExRTMP.AMF0 do
     {list, rest}
   end
 
+  defp parse_value(<<0x0A::8, count::32, rest::binary>>) do
+    Enum.map_reduce(1..count, rest, fn _idx, rest ->
+      parse_value(rest)
+    end)
+  end
+
   defp parse_object(rest, obj) do
     case parse_object_key(rest) do
       {:object_end, rest} ->
