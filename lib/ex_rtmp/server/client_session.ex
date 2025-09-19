@@ -109,42 +109,13 @@ defmodule ExRTMP.Server.ClientSession do
     Enum.reduce(messages, %{state | chunk_parser: parser}, &handle_message/2)
   end
 
-  defp handle_message(%{type: 20} = message, state) do
-    {messages, state} =
-      case message.payload do
-        %NetConnection.Connect{} ->
-          handle_connect_message(message.payload, state)
-
-        %CreateStream{} ->
-          handle_create_stream_message(message.payload, state)
-
-        %Publish{} ->
-          handle_publish_message(message.payload, message.stream_id, state)
-
-        %DeleteStream{} ->
-          handle_delete_stream(message.payload.stream_id, state)
-
-        %Play{} ->
-          handle_play_message(message.payload, message.stream_id, state)
-
-        _other ->
-          Logger.warning("Unknown command message: #{inspect(message.payload)}")
-          {[], state}
-      end
-
-    send_messages(state, messages)
+  defp handle_message(%{type: 1, payload: chunk_size}, state) do
+    %{state | chunk_parser: %{state.chunk_parser | chunk_size: chunk_size}}
   end
 
-  defp handle_message(%{type: 18, payload: %Metadata{data: data}} = message, state) do
-    %{
-      state
-      | handler_state:
-          state.handler_mod.handle_metadata(
-            message.stream_id,
-            data,
-            state.handler_state
-          )
-    }
+  defp handle_message(%{type: 4}, state) do
+    # Ignore user control messages for now
+    state
   end
 
   defp handle_message(%{type: 8} = message, state) do
@@ -183,8 +154,42 @@ defmodule ExRTMP.Server.ClientSession do
     end
   end
 
-  defp handle_message(%{type: 1, payload: chunk_size}, state) do
-    %{state | chunk_parser: %{state.chunk_parser | chunk_size: chunk_size}}
+  defp handle_message(%{type: 18, payload: %Metadata{data: data}} = message, state) do
+    %{
+      state
+      | handler_state:
+          state.handler_mod.handle_metadata(
+            message.stream_id,
+            data,
+            state.handler_state
+          )
+    }
+  end
+
+  defp handle_message(%{type: 20} = message, state) do
+    {messages, state} =
+      case message.payload do
+        %NetConnection.Connect{} ->
+          handle_connect_message(message.payload, state)
+
+        %CreateStream{} ->
+          handle_create_stream_message(message.payload, state)
+
+        %Publish{} ->
+          handle_publish_message(message.payload, message.stream_id, state)
+
+        %DeleteStream{} ->
+          handle_delete_stream(message.payload.stream_id, state)
+
+        %Play{} ->
+          handle_play_message(message.payload, message.stream_id, state)
+
+        _other ->
+          Logger.warning("Unknown command message: #{inspect(message.payload)}")
+          {[], state}
+      end
+
+    send_messages(state, messages)
   end
 
   defp handle_message(msg, state) do

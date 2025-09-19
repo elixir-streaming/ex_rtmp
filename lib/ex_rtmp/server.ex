@@ -39,6 +39,11 @@ defmodule ExRTMP.Server do
   end
 
   @impl true
+  def handle_info({:DOWN, _ref, :process, _pid, _reason}, state) do
+    {:noreply, state}
+  end
+
+  @impl true
   def handle_info(msg, state) do
     Logger.warning("Received an unexpected message: #{inspect(msg)}")
     {:noreply, state}

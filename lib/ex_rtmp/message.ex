@@ -8,6 +8,7 @@ defmodule ExRTMP.Message do
   alias __MODULE__.Command.NetConnection.{Connect, CreateStream}
   alias __MODULE__.Command.NetStream.{DeleteStream, Play, Publish}
   alias __MODULE__.Metadata
+  alias __MODULE__.UserControl.Event
   alias ExRTMP.Chunk
 
   @type t :: %__MODULE__{
@@ -82,7 +83,7 @@ defmodule ExRTMP.Message do
   # User control messages
   @spec stream_begin(non_neg_integer()) :: t()
   def stream_begin(stream_id) do
-    new(<<0::16, stream_id::32>>, type: 4, timestamp: 0, stream_id: 0)
+    new(Event.new(:stream_begin, stream_id), type: 4, timestamp: 0, stream_id: 0)
   end
 
   @doc """
@@ -108,8 +109,7 @@ defmodule ExRTMP.Message do
   end
 
   @doc false
-  @spec parse_payload(t()) :: t()
-  def parse_payload(%__MODULE__{type: 20, payload: payload} = msg) do
+  defp parse_payload(%__MODULE__{type: 20, payload: payload} = msg) do
     payload =
       case ExRTMP.AMF0.parse(IO.iodata_to_binary(payload)) do
         ["connect", transaction_id, properties | _rest] ->
@@ -143,7 +143,7 @@ defmodule ExRTMP.Message do
     %{msg | payload: payload}
   end
 
-  def parse_payload(%__MODULE__{type: 18, payload: payload} = msg) do
+  defp parse_payload(%__MODULE__{type: 18, payload: payload} = msg) do
     payload =
       case ExRTMP.AMF0.parse(IO.iodata_to_binary(payload)) do
         ["@setDataFrame", "onMetaData", metadata] ->
@@ -160,12 +160,17 @@ defmodule ExRTMP.Message do
     %{msg | payload: payload}
   end
 
-  def parse_payload(%__MODULE__{type: 1, payload: payload} = msg) do
+  defp parse_payload(%__MODULE__{type: 1, payload: payload} = msg) do
     <<0::1, chunk_size::31>> = IO.iodata_to_binary(payload)
     %{msg | payload: chunk_size}
   end
 
-  def parse_payload(msg), do: msg
+  defp parse_payload(%__MODULE__{type: 4, payload: payload} = msg) do
+    {:ok, event} = Event.parse(IO.iodata_to_binary(payload))
+    %{msg | payload: event}
+  end
+
+  defp parse_payload(msg), do: msg
 
   @spec serialize(t()) :: iodata()
   def serialize(message) do
