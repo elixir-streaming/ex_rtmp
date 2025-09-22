@@ -12,6 +12,8 @@ defmodule ExRTMP.Server.ClientSession do
   alias ExRTMP.Message.Command.NetStream.{DeleteStream, Play, Publish, OnStatus}
   alias ExRTMP.Message.Metadata
 
+  @default_acknowledgement_size 3_000_000
+
   defmodule State do
     @moduledoc false
 
@@ -134,6 +136,19 @@ defmodule ExRTMP.Server.ClientSession do
     %{state | chunk_parser: %{state.chunk_parser | chunk_size: chunk_size}}
   end
 
+  defp handle_message(%{type: 3, payload: received_bytes}, state) do
+    Logger.debug(
+      "Received window acknowledgement size message, received_bytes: #{received_bytes}"
+    )
+
+    state
+  end
+
+  defp handle_message(%{type: 5, payload: win_size}, state) do
+    Logger.debug("Received window size message, window_size: #{win_size}")
+    state
+  end
+
   defp handle_message(%{type: 4}, state) do
     # Ignore user control messages for now
     state
@@ -226,7 +241,11 @@ defmodule ExRTMP.Server.ClientSession do
     case state.handler_mod.handle_connect(connect, state.handler_state) do
       {:ok, handler_state} ->
         state = %{state | handler_state: handler_state, state: :connected}
-        {[Message.command(Response.ok(1))], state}
+
+        {[
+           Message.window_acknowledgment_size(@default_acknowledgement_size),
+           Message.command(Response.ok(1))
+         ], state}
 
       {:error, reason} ->
         {[Message.command(Response.connect_failed(reason))], state}

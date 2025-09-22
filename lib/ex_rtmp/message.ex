@@ -95,6 +95,7 @@ defmodule ExRTMP.Message do
     new(command, type: 20, timestamp: 0, stream_id: stream_id)
   end
 
+  @doc false
   @spec append(t(), binary()) :: {:ok, t()} | {:more, t()}
   def append(%__MODULE__{payload: payload} = msg, chunk_payload) do
     current_size = msg.current_size + byte_size(chunk_payload)
@@ -106,6 +107,77 @@ defmodule ExRTMP.Message do
     else
       {:more, %{msg | current_size: current_size, payload: payload}}
     end
+  end
+
+  @spec serialize(t(), keyword()) :: iodata()
+  def serialize(message, opts \\ []) do
+    chunk_size = Keyword.get(opts, :chunk_size, 128)
+    chunk_stream_id = Keyword.get(opts, :chunk_stream_id, 2)
+
+    payload =
+      if is_struct(message.payload),
+        do: ExRTMP.Message.Serializer.serialize(message.payload),
+        else: message.payload
+
+    payload = IO.iodata_to_binary(payload)
+    entries = ceil(byte_size(payload) / chunk_size)
+
+    first_chunk = %Chunk{
+      fmt: 0,
+      stream_id: chunk_stream_id,
+      payload: binary_part(payload, 0, min(byte_size(payload), chunk_size)),
+      timestamp: message.timestamp,
+      message_length: byte_size(payload),
+      message_type_id: message.type,
+      message_stream_id: message.stream_id
+    }
+
+    2..entries//1
+    |> Stream.map(fn idx ->
+      offset = (idx - 1) * chunk_size
+      size = min(byte_size(payload) - offset, chunk_size)
+      binary_part(payload, offset, size)
+    end)
+    |> Stream.map(&%Chunk{payload: &1, stream_id: chunk_stream_id, fmt: 3})
+    |> Enum.map(&Chunk.serialize/1)
+    |> then(&[Chunk.serialize(first_chunk) | &1])
+  end
+
+  defp parse_payload(%__MODULE__{type: 1, payload: payload} = msg) do
+    <<0::1, chunk_size::31>> = IO.iodata_to_binary(payload)
+    %{msg | payload: chunk_size}
+  end
+
+  defp parse_payload(%__MODULE__{type: 3, payload: payload} = msg) do
+    <<received_bytes::32>> = IO.iodata_to_binary(payload)
+    %{msg | payload: received_bytes}
+  end
+
+  defp parse_payload(%__MODULE__{type: 4, payload: payload} = msg) do
+    {:ok, event} = Event.parse(IO.iodata_to_binary(payload))
+    %{msg | payload: event}
+  end
+
+  defp parse_payload(%__MODULE__{type: 5, payload: payload} = msg) do
+    <<win_size::32>> = IO.iodata_to_binary(payload)
+    %{msg | payload: win_size}
+  end
+
+  defp parse_payload(%__MODULE__{type: 18, payload: payload} = msg) do
+    payload =
+      case ExRTMP.AMF0.parse(IO.iodata_to_binary(payload)) do
+        ["@setDataFrame", "onMetaData", metadata] ->
+          %Metadata{data: Map.new(metadata)}
+
+        ["onMetaData", metadata] ->
+          %Metadata{data: Map.new(metadata)}
+
+        other ->
+          Logger.warning("Unknown parsed metadata: #{inspect(other)}")
+          payload
+      end
+
+    %{msg | payload: payload}
   end
 
   @doc false
@@ -143,66 +215,5 @@ defmodule ExRTMP.Message do
     %{msg | payload: payload}
   end
 
-  defp parse_payload(%__MODULE__{type: 18, payload: payload} = msg) do
-    payload =
-      case ExRTMP.AMF0.parse(IO.iodata_to_binary(payload)) do
-        ["@setDataFrame", "onMetaData", metadata] ->
-          %Metadata{data: Map.new(metadata)}
-
-        ["onMetaData", metadata] ->
-          %Metadata{data: Map.new(metadata)}
-
-        other ->
-          Logger.warning("Unknown parsed metadata: #{inspect(other)}")
-          payload
-      end
-
-    %{msg | payload: payload}
-  end
-
-  defp parse_payload(%__MODULE__{type: 1, payload: payload} = msg) do
-    <<0::1, chunk_size::31>> = IO.iodata_to_binary(payload)
-    %{msg | payload: chunk_size}
-  end
-
-  defp parse_payload(%__MODULE__{type: 4, payload: payload} = msg) do
-    {:ok, event} = Event.parse(IO.iodata_to_binary(payload))
-    %{msg | payload: event}
-  end
-
   defp parse_payload(msg), do: msg
-
-  @spec serialize(t(), keyword()) :: iodata()
-  def serialize(message, opts \\ []) do
-    chunk_size = Keyword.get(opts, :chunk_size, 128)
-    chunk_stream_id = Keyword.get(opts, :chunk_stream_id, 2)
-
-    payload =
-      if is_struct(message.payload),
-        do: ExRTMP.Message.Serializer.serialize(message.payload),
-        else: message.payload
-
-    payload = IO.iodata_to_binary(payload)
-    entries = ceil(byte_size(payload) / chunk_size)
-
-    first_chunk = %Chunk{
-      fmt: 0,
-      stream_id: chunk_stream_id,
-      payload: binary_part(payload, 0, min(byte_size(payload), chunk_size)),
-      timestamp: message.timestamp,
-      message_length: byte_size(payload),
-      message_type_id: message.type,
-      message_stream_id: message.stream_id
-    }
-
-    2..entries//1
-    |> Stream.map(fn idx ->
-      offset = (idx - 1) * chunk_size
-      size = min(byte_size(payload) - offset, chunk_size)
-      binary_part(payload, offset, size)
-    end)
-    |> Stream.map(&%Chunk{payload: &1, stream_id: chunk_stream_id, fmt: 3})
-    |> Enum.map(&Chunk.serialize/1)
-    |> then(&[Chunk.serialize(first_chunk) | &1])
-  end
 end
