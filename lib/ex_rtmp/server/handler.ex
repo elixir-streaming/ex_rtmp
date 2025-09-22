@@ -33,6 +33,9 @@ defmodule ExRTMP.Server.Handler do
   @callback handle_publish(stream_id :: non_neg_integer(), stream_key :: String.t(), state()) ::
               return()
 
+  @doc """
+  Called when a client send a `play` net stream command.
+  """
   @callback handle_play(stream_id :: non_neg_integer(), Play.t(), state()) :: return()
 
   @doc """

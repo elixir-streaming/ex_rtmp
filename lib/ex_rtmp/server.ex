@@ -1,6 +1,18 @@
 defmodule ExRTMP.Server do
   @moduledoc """
-  RTMP server implentation
+  Module describing an RTMP server.
+
+  The server listens for incoming RTMP client connections and spawns a new
+  `ExRTMP.Server.ClientSession` process for each connected client.
+
+  ## Options
+
+    * `:handler` - The module that will handle the RTMP commands and messages.
+      This module must implement the `ExRTMP.Server.Handler` behaviour. This
+      option is required.
+
+    * `:handler_options` - A keyword list of options that will be passed to the
+      handler module when it is started. This option is optional.
   """
 
   use GenServer

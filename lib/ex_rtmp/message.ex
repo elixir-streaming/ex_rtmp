@@ -22,6 +22,7 @@ defmodule ExRTMP.Message do
 
   defstruct [:type, :size, :current_size, :payload, :timestamp, :stream_id]
 
+  @doc false
   @spec new(Chunk.t()) :: t()
   def new(%Chunk{} = chunk) do
     %__MODULE__{
@@ -34,6 +35,9 @@ defmodule ExRTMP.Message do
     }
   end
 
+  @doc """
+  Creates a new `Message`.
+  """
   @spec new(iodata() | struct(), keyword()) :: t()
   def new(payload, opts) do
     struct(%__MODULE__{payload: payload}, opts)
@@ -81,6 +85,9 @@ defmodule ExRTMP.Message do
   end
 
   # User control messages
+  @doc """
+  Builds a `User Control` message.
+  """
   @spec stream_begin(non_neg_integer()) :: t()
   def stream_begin(stream_id) do
     new(Event.new(:stream_begin, stream_id), type: 4, timestamp: 0, stream_id: 0)
@@ -109,6 +116,14 @@ defmodule ExRTMP.Message do
     end
   end
 
+  @doc """
+  Serializes the message.
+
+  The following options may be provided:
+
+    * `:chunk_size` - The size of each chunk (default: 128)
+    * `:chunk_stream_id` - The chunk stream id to use (default: 2)
+  """
   @spec serialize(t(), keyword()) :: iodata()
   def serialize(message, opts \\ []) do
     chunk_size = Keyword.get(opts, :chunk_size, 128)

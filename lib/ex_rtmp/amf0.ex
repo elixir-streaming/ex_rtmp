@@ -1,12 +1,22 @@
 defmodule ExRTMP.AMF0 do
   @moduledoc """
-  AMF0 parser.
+  Module responsible for parsing and serializingf AMF0 data.
   """
 
+  @type amf_value :: number() | boolean() | nil | String.t() | map() | list() | atom()
+
+  @doc """
+  Parses the `amf0` encoded binary,
+
+  The result is a list of decoded items.
+  """
   @spec parse(binary()) :: list()
   def parse(data), do: do_parse(data, [])
 
-  @spec serialize(any()) :: iodata()
+  @doc """
+  Serializes the given value into `amf0` format.
+  """
+  @spec serialize(amf_value()) :: iodata()
   def serialize(true), do: <<0x01, 1>>
   def serialize(false), do: <<0x01, 0>>
   def serialize(nil), do: <<0x05>>

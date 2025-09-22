@@ -1,5 +1,7 @@
 defmodule ExRTMP.Server.ClientSession do
-  @moduledoc false
+  @moduledoc """
+  Module describing an RTMP client session.
+  """
 
   use GenServer
 
@@ -42,16 +44,23 @@ defmodule ExRTMP.Server.ClientSession do
                 ]
   end
 
+  @doc false
   @spec start(keyword()) :: GenServer.on_start()
   def start(opts) do
     GenServer.start(__MODULE__, opts)
   end
 
+  @doc """
+  Sends video data to the client.
+  """
   @spec send_video_data(pid(), non_neg_integer(), non_neg_integer(), iodata()) :: :ok
   def send_video_data(pid, stream_id, timestamp, data) do
     GenServer.cast(pid, {:video_data, stream_id, timestamp, data})
   end
 
+  @doc """
+  Sends audio data to the client.
+  """
   @spec send_audio_data(pid(), non_neg_integer(), non_neg_integer(), iodata()) :: :ok
   def send_audio_data(pid, stream_id, timestamp, data) do
     GenServer.cast(pid, {:audio_data, stream_id, timestamp, data})
