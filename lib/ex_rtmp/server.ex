@@ -11,8 +11,12 @@ defmodule ExRTMP.Server do
 
   @default_port 1935
 
+  def start(opts) do
+    GenServer.start(__MODULE__, opts, name: opts[:name])
+  end
+
   def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+    GenServer.start_link(__MODULE__, opts, name: opts[:name])
   end
 
   @impl true

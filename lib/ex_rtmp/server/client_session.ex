@@ -20,7 +20,6 @@ defmodule ExRTMP.Server.ClientSession do
 
     @type t :: %__MODULE__{
             socket: :inet.socket(),
-            app_name: String.t() | nil,
             chunk_parser: ChunkParser.t(),
             handler_mod: module(),
             handler_state: any(),
@@ -32,7 +31,6 @@ defmodule ExRTMP.Server.ClientSession do
     @enforce_keys [:socket]
     defstruct @enforce_keys ++
                 [
-                  :app_name,
                   :handler_mod,
                   :handler_state,
                   chunk_parser: ChunkParser.new(),
@@ -42,8 +40,19 @@ defmodule ExRTMP.Server.ClientSession do
                 ]
   end
 
+  @spec start(keyword()) :: GenServer.on_start()
   def start(opts) do
     GenServer.start(__MODULE__, opts)
+  end
+
+  @spec send_video_data(pid(), non_neg_integer(), non_neg_integer(), iodata()) :: :ok
+  def send_video_data(pid, stream_id, timestamp, data) do
+    GenServer.cast(pid, {:video_data, stream_id, timestamp, data})
+  end
+
+  @spec send_audio_data(pid(), non_neg_integer(), non_neg_integer(), iodata()) :: :ok
+  def send_audio_data(pid, stream_id, timestamp, data) do
+    GenServer.cast(pid, {:audio_data, stream_id, timestamp, data})
   end
 
   @impl true
@@ -71,6 +80,18 @@ defmodule ExRTMP.Server.ClientSession do
       :error ->
         {:stop, :handshake_failed, state}
     end
+  end
+
+  @impl true
+  def handle_cast({:video_data, stream_id, timestamp, data}, state) do
+    send_media(:video, state.socket, stream_id, timestamp, data)
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_cast({:audio_data, stream_id, timestamp, data}, state) do
+    send_media(:audio, state.socket, stream_id, timestamp, data)
+    {:noreply, state}
   end
 
   @impl true
@@ -204,13 +225,7 @@ defmodule ExRTMP.Server.ClientSession do
   defp handle_connect_message(connect, state) do
     case state.handler_mod.handle_connect(connect, state.handler_state) do
       {:ok, handler_state} ->
-        state = %{
-          state
-          | handler_state: handler_state,
-            state: :connected,
-            app_name: connect.properties["app"]
-        }
-
+        state = %{state | handler_state: handler_state, state: :connected}
         {[Message.command(Response.ok(1))], state}
 
       {:error, reason} ->
@@ -281,6 +296,7 @@ defmodule ExRTMP.Server.ClientSession do
   end
 
   defp handle_play_message(play, stream_id, state) do
+    Logger.debug("Received play command for #{play.name} on stream: #{stream_id}")
     stream_state = Map.get(state.streams_state, stream_id)
 
     cond do
@@ -314,6 +330,8 @@ defmodule ExRTMP.Server.ClientSession do
   end
 
   defp handle_delete_stream(stream_id, state) do
+    Logger.debug("Received delete stream commad on stream: #{stream_id}")
+
     state = %{
       state
       | streams_state: Map.delete(state.streams_state, stream_id),
@@ -321,6 +339,23 @@ defmodule ExRTMP.Server.ClientSession do
     }
 
     {[], state}
+  end
+
+  defp send_media(media, socket, stream_id, timestamp, data) do
+    {type, chunk_stream_id} =
+      case media do
+        :audio -> {8, stream_id * 3}
+        :video -> {9, stream_id * 3 + 1}
+      end
+
+    message = %Message{
+      type: type,
+      timestamp: timestamp,
+      stream_id: stream_id,
+      payload: data
+    }
+
+    :ok = :gen_tcp.send(socket, Message.serialize(message, chunk_stream_id: chunk_stream_id))
   end
 
   defp send_messages(state, []), do: state

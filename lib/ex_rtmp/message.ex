@@ -13,7 +13,7 @@ defmodule ExRTMP.Message do
 
   @type t :: %__MODULE__{
           type: non_neg_integer(),
-          size: non_neg_integer(),
+          size: non_neg_integer() | nil,
           current_size: non_neg_integer() | nil,
           payload: iodata() | struct() | non_neg_integer(),
           timestamp: non_neg_integer(),
@@ -172,31 +172,37 @@ defmodule ExRTMP.Message do
 
   defp parse_payload(msg), do: msg
 
-  @spec serialize(t()) :: iodata()
-  def serialize(message) do
+  @spec serialize(t(), keyword()) :: iodata()
+  def serialize(message, opts \\ []) do
+    chunk_size = Keyword.get(opts, :chunk_size, 128)
+    chunk_stream_id = Keyword.get(opts, :chunk_stream_id, 2)
+
     payload =
       if is_struct(message.payload),
         do: ExRTMP.Message.Serializer.serialize(message.payload),
         else: message.payload
 
     payload = IO.iodata_to_binary(payload)
+    entries = ceil(byte_size(payload) / chunk_size)
 
-    payload
-    |> :binary.bin_to_list()
-    |> Enum.chunk_every(128)
-    |> Enum.map(&%Chunk{payload: &1, stream_id: 2, fmt: 3})
-    |> then(fn [first | rest] ->
-      first = %{
-        first
-        | fmt: 0,
-          timestamp: message.timestamp,
-          message_length: byte_size(payload),
-          message_type_id: message.type,
-          message_stream_id: message.stream_id
-      }
+    first_chunk = %Chunk{
+      fmt: 0,
+      stream_id: chunk_stream_id,
+      payload: binary_part(payload, 0, min(byte_size(payload), chunk_size)),
+      timestamp: message.timestamp,
+      message_length: byte_size(payload),
+      message_type_id: message.type,
+      message_stream_id: message.stream_id
+    }
 
-      [first | rest]
+    2..entries//1
+    |> Stream.map(fn idx ->
+      offset = (idx - 1) * chunk_size
+      size = min(byte_size(payload) - offset, chunk_size)
+      binary_part(payload, offset, size)
     end)
+    |> Stream.map(&%Chunk{payload: &1, stream_id: chunk_stream_id, fmt: 3})
     |> Enum.map(&Chunk.serialize/1)
+    |> then(&[Chunk.serialize(first_chunk) | &1])
   end
 end

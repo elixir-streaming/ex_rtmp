@@ -42,7 +42,7 @@ defmodule ExRTMP.Chunk do
     type_id = if chunk.message_type_id, do: <<chunk.message_type_id::8>>, else: <<>>
 
     msg_stream_id =
-      if chunk.message_stream_id, do: <<chunk.message_stream_id::32-little>>, else: <<>>
+      if chunk.message_stream_id, do: <<chunk.message_stream_id::integer-32-little>>, else: <<>>
 
     [
       <<chunk.fmt::2, encode_stream_id(chunk.stream_id)::bitstring>>,
