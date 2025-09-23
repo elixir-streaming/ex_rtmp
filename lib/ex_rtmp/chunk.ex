@@ -1,6 +1,6 @@
 defmodule ExRTMP.Chunk do
   @moduledoc """
-  RTMP Chunk structure
+  Module describing an RTMP chunk.
   """
 
   @type payload_size :: non_neg_integer()
@@ -26,6 +26,9 @@ defmodule ExRTMP.Chunk do
     :payload
   ]
 
+  @doc """
+  Parses the binary into a chunk header.
+  """
   @spec parse_header(binary()) :: {:ok, t(), binary()} | :more
   def parse_header(data) do
     with {:ok, chunk, rest} <- parse_stream_id(data),
@@ -35,6 +38,9 @@ defmodule ExRTMP.Chunk do
     end
   end
 
+  @doc """
+  Serializes the chunk into binary.
+  """
   @spec serialize(t()) :: iodata()
   def serialize(%__MODULE__{} = chunk) do
     timestamp = if chunk.timestamp, do: <<chunk.timestamp::24>>, else: <<>>
@@ -42,7 +48,7 @@ defmodule ExRTMP.Chunk do
     type_id = if chunk.message_type_id, do: <<chunk.message_type_id::8>>, else: <<>>
 
     msg_stream_id =
-      if chunk.message_stream_id, do: <<chunk.message_stream_id::32-little>>, else: <<>>
+      if chunk.message_stream_id, do: <<chunk.message_stream_id::integer-32-little>>, else: <<>>
 
     [
       <<chunk.fmt::2, encode_stream_id(chunk.stream_id)::bitstring>>,

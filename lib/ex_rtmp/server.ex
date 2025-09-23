@@ -1,6 +1,18 @@
 defmodule ExRTMP.Server do
   @moduledoc """
-  RTMP server implentation
+  Module describing an RTMP server.
+
+  The server listens for incoming RTMP client connections and spawns a new
+  `ExRTMP.Server.ClientSession` process for each connected client.
+
+  ## Options
+
+    * `:handler` - The module that will handle the RTMP commands and messages.
+      This module must implement the `ExRTMP.Server.Handler` behaviour. This
+      option is required.
+
+    * `:handler_options` - A keyword list of options that will be passed to the
+      handler module when it is started. This option is optional.
   """
 
   use GenServer
@@ -11,8 +23,12 @@ defmodule ExRTMP.Server do
 
   @default_port 1935
 
+  def start(opts) do
+    GenServer.start(__MODULE__, opts, name: opts[:name])
+  end
+
   def start_link(opts) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+    GenServer.start_link(__MODULE__, opts, name: opts[:name])
   end
 
   @impl true
@@ -35,6 +51,11 @@ defmodule ExRTMP.Server do
   @impl true
   def handle_info({:new_client, pid}, state) do
     _ref = Process.monitor(pid)
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:DOWN, _ref, :process, _pid, _reason}, state) do
     {:noreply, state}
   end
 

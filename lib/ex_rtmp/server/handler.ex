@@ -4,6 +4,7 @@ defmodule ExRTMP.Server.Handler do
   """
 
   alias ExRTMP.Message.Command.NetConnection.Connect
+  alias ExRTMP.Message.Command.NetStream.Play
 
   @type state :: any()
   @type stream_id :: non_neg_integer()
@@ -31,6 +32,11 @@ defmodule ExRTMP.Server.Handler do
   """
   @callback handle_publish(stream_id :: non_neg_integer(), stream_key :: String.t(), state()) ::
               return()
+
+  @doc """
+  Called when a client send a `play` net stream command.
+  """
+  @callback handle_play(stream_id :: non_neg_integer(), Play.t(), state()) :: return()
 
   @doc """
   Called when a client send a `deleteStream` net stream command.
@@ -77,6 +83,9 @@ defmodule ExRTMP.Server.Handler do
       def handle_publish(_stream_id, _stream_key, state), do: {:ok, state}
 
       @impl true
+      def handle_play(_stream_id, _play, state), do: {:ok, state}
+
+      @impl true
       def handle_delete_stream(_stream_id, state), do: state
 
       @impl true
@@ -92,6 +101,7 @@ defmodule ExRTMP.Server.Handler do
                      handle_connect: 2,
                      handle_create_stream: 1,
                      handle_publish: 3,
+                     handle_play: 3,
                      handle_delete_stream: 2,
                      handle_metadata: 3,
                      handle_video_data: 4,
