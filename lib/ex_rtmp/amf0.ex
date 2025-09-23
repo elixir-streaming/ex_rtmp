@@ -33,6 +33,15 @@ defmodule ExRTMP.AMF0 do
     [0x03, pairs, 0, 0, 9]
   end
 
+  def serialize({:ecma_array, array}) do
+    items =
+      Enum.map(array, fn {key, value} ->
+        [<<byte_size(key)::16, key::binary>>, serialize(value)]
+      end)
+
+    [<<0x08::8, map_size(array)::32>>, items, 0, 0, 9]
+  end
+
   defp do_parse(<<>>, acc), do: Enum.reverse(acc)
 
   defp do_parse(data, acc) do

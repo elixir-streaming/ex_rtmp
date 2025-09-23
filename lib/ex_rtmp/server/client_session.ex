@@ -66,6 +66,14 @@ defmodule ExRTMP.Server.ClientSession do
     GenServer.cast(pid, {:audio_data, stream_id, timestamp, data})
   end
 
+  @doc """
+  Sends metadata about the media to the client.
+  """
+  @spec send_metadata(pid(), non_neg_integer(), map()) :: :ok
+  def send_metadata(pid, stream_id, data) do
+    GenServer.cast(pid, {:metadata, stream_id, data})
+  end
+
   @impl true
   def init(options) do
     handler_mod = Keyword.fetch!(options, :handler)
@@ -106,12 +114,20 @@ defmodule ExRTMP.Server.ClientSession do
   end
 
   @impl true
+  def handle_cast({:metadata, stream_id, data}, state) do
+    message = Message.metadata(data, stream_id)
+    :ok = :gen_tcp.send(state.socket, Message.serialize(message))
+    {:noreply, state}
+  end
+
+  @impl true
   def handle_info({:tcp, _port, data}, state) do
     {:noreply, do_handle_data(state, data)}
   end
 
   @impl true
   def handle_info({:tcp_closed, _port}, state) do
+    Logger.debug("Client disconnected")
     {:stop, :normal, state}
   end
 

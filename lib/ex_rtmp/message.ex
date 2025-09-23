@@ -102,6 +102,14 @@ defmodule ExRTMP.Message do
     new(command, type: 20, timestamp: 0, stream_id: stream_id)
   end
 
+  @doc """
+  Builds a `Metadata` message.
+  """
+  @spec metadata(map(), non_neg_integer()) :: t()
+  def metadata(metadata, stream_id) do
+    new(%Metadata{data: metadata}, type: 18, timestamp: 0, stream_id: stream_id)
+  end
+
   @doc false
   @spec append(t(), binary()) :: {:ok, t()} | {:more, t()}
   def append(%__MODULE__{payload: payload} = msg, chunk_payload) do
@@ -182,6 +190,7 @@ defmodule ExRTMP.Message do
     payload =
       case ExRTMP.AMF0.parse(IO.iodata_to_binary(payload)) do
         ["@setDataFrame", "onMetaData", metadata] ->
+          IO.inspect(metadata)
           %Metadata{data: Map.new(metadata)}
 
         ["onMetaData", metadata] ->
