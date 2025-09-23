@@ -127,7 +127,6 @@ defmodule ExRTMP.Server.ClientSession do
 
   @impl true
   def handle_info({:tcp_closed, _port}, state) do
-    Logger.debug("Client disconnected")
     {:stop, :normal, state}
   end
 

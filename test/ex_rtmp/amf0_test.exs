@@ -1,6 +1,8 @@
 defmodule ExRTMP.AMF0Test do
   use ExUnit.Case, async: true
 
+  doctest ExRTMP.AMF0
+
   alias ExRTMP.AMF0
 
   @payload <<2, 0, 7, 99, 111, 110, 110, 101, 99, 116, 0, 63, 240, 0, 0, 0, 0, 0, 0, 3, 0, 3, 97,
