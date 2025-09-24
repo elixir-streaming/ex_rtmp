@@ -13,3 +13,27 @@ def deps do
   ]
 end
 ```
+
+## Usage
+See the [examples](./examples) folder.
+
+### `save_to_flv.exs`
+A client publish to an RTMP server and the server stores into flv file.
+
+To publish a stream to the server use `ffmpeg`:
+```bash
+ffmpeg -re -i input_file.mp4 -c:v copy -c:a copy -f flv rtmp://localhost:1935/live/test
+```
+
+### `send_mp4.exs`
+The server stream an mp4 file to connected clients. The mp4 file must have AAC audio and H264/AVC video.
+
+To start the server:
+```bash
+elixir examples/send_mp4.exs "input_file.mp4"
+```
+
+and to play the stream, you can use `vlc` or `ffplay`:
+```bash
+ffplay -i rtmp://localhost:1935/live/test
+```
