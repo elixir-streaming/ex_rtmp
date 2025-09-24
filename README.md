@@ -1,5 +1,8 @@
 # ExRTMP
 
+[![Hex.pm](https://img.shields.io/hexpm/v/ex_rtmp.svg)](https://hex.pm/packages/ex_rtmp)
+[![API Docs](https://img.shields.io/badge/api-docs-yellow.svg?style=flat)](https://hexdocs.pm/ex_rtmp)
+
 RTMP server and client library for Elixir.
 
 ## Installation
