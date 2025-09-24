@@ -190,7 +190,6 @@ defmodule ExRTMP.Message do
     payload =
       case ExRTMP.AMF0.parse(IO.iodata_to_binary(payload)) do
         ["@setDataFrame", "onMetaData", metadata] ->
-          IO.inspect(metadata)
           %Metadata{data: Map.new(metadata)}
 
         ["onMetaData", metadata] ->
