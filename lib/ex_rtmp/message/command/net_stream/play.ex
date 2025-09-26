@@ -17,4 +17,20 @@ defmodule ExRTMP.Message.Command.NetStream.Play do
   def new(transaction_id, name, opts \\ []) do
     struct(%__MODULE__{transaction_id: transaction_id, name: name}, opts)
   end
+
+  defimpl ExRTMP.Message.Serializer do
+    alias ExRTMP.AMF0
+
+    def serialize(play) do
+      [
+        AMF0.serialize("play"),
+        AMF0.serialize(play.transaction_id),
+        AMF0.serialize(nil),
+        AMF0.serialize(play.name),
+        AMF0.serialize(play.start),
+        AMF0.serialize(play.duration),
+        AMF0.serialize(play.reset)
+      ]
+    end
+  end
 end

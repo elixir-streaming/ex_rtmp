@@ -30,6 +30,7 @@ defmodule ExRTMP.Message.Command.NetConnection.Response do
     error(transaction_id, "NetConnection.CreateStream.Failed", reason)
   end
 
+  @spec error(number(), String.t(), String.t()) :: t()
   def error(transaction_id, code, description) do
     %__MODULE__{
       result: "_error",
@@ -42,6 +43,13 @@ defmodule ExRTMP.Message.Command.NetConnection.Response do
       }
     }
   end
+
+  @doc """
+  Checks if the response is OK.
+  """
+  @spec ok?(t()) :: boolean()
+  def ok?(%__MODULE__{result: "_result"}), do: true
+  def ok?(%__MODULE__{}), do: false
 
   defimpl ExRTMP.Message.Serializer do
     def serialize(response) do
