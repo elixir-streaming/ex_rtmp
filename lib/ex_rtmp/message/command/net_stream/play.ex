@@ -11,7 +11,7 @@ defmodule ExRTMP.Message.Command.NetStream.Play do
           reset: boolean()
         }
 
-  defstruct [:transaction_id, :name, start: -2, duration: -1, reset: true]
+  defstruct [:transaction_id, :name, start: -2000, duration: -1, reset: true]
 
   @spec new(float(), String.t(), keyword()) :: t()
   def new(transaction_id, name, opts \\ []) do

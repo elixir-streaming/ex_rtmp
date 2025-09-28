@@ -249,7 +249,7 @@ defmodule ExRTMP.Message do
           %OnStatus{info: info}
 
         other ->
-          Logger.warning("Unknown command: #{inspect(other)}")
+          Logger.warning("Unknown command: #{inspect(List.first(other))}")
           payload
       end
 

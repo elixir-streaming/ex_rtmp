@@ -104,7 +104,7 @@ defmodule ExRTMP.Client do
   @impl true
   def handle_call({:delete_stream, stream_id}, _from, state) do
     delete = DeleteStream.new(0, stream_id)
-    send_messages(state.socket, [Message.command(delete, stream_id)] |> IO.inspect())
+    send_messages(state.socket, [Message.command(delete, stream_id)])
     {:reply, :ok, State.delete_stream(state, stream_id)}
   end
 
@@ -167,12 +167,18 @@ defmodule ExRTMP.Client do
     state
   end
 
-  defp do_handle_message(%{type: 9}, state) do
+  defp do_handle_message(%{type: 8}, state) do
+    Logger.debug("Received audio message")
     state
   end
 
-  defp do_handle_message(%{type: 18, payload: metadata}, state) do
-    Logger.info("Received metadata: #{inspect(metadata)}")
+  defp do_handle_message(%{type: 9}, state) do
+    Logger.debug("Received video message")
+    state
+  end
+
+  defp do_handle_message(%{type: 18} = msg, state) do
+    Logger.debug("Received metadata on stream #{msg.stream_id}: #{inspect(msg.payload)}")
     state
   end
 
@@ -217,34 +223,26 @@ defmodule ExRTMP.Client do
   end
 
   defp handle_play_response(info, stream_ctx, state) do
-    reply =
-      case info["code"] do
-        "NetStream.Play.Start" ->
-          :ok
-
-        "NetStream.Play.Reset" ->
-          :ignore
-
-        "NetStream.Play.StreamNotFound" ->
-          {:error, "Stream not found"}
-
-        "NetStream.Play.Failed" ->
-          {:error, "Play failed"}
-
-        other ->
-          Logger.warning("Unhandled play response code: #{other}")
-          :ignore
-      end
-
-    case reply do
+    case handle_play_resp_code(info["code"]) do
       :ignore ->
         state
 
-      other ->
-        GenServer.reply(stream_ctx.pending_peer, other)
-        State.clear_stream_pending_action(state, stream_ctx.id)
+      :ok ->
+        GenServer.reply(stream_ctx.pending_peer, :ok)
+        stream_ctx = %{stream_ctx | pending_peer: nil, pending_action: nil, state: :playing}
+        %{state | streams: Map.put(state.streams, stream_ctx.id, stream_ctx)}
+
+      {:error, reason} ->
+        GenServer.reply(stream_ctx.pending_peer, {:error, Map.get(info, "description", reason)})
+        stream_ctx = %{stream_ctx | pending_peer: nil, pending_action: nil}
+        %{state | streams: Map.put(state.streams, stream_ctx.id, stream_ctx)}
     end
   end
+
+  defp handle_play_resp_code("NetStream.Play.Start"), do: :ok
+  defp handle_play_resp_code("NetStream.Play.Reset"), do: :ignore
+  defp handle_play_resp_code("NetStream.Play.StreamNotFound"), do: {:error, "Stream not found"}
+  defp handle_play_resp_code("NetStream.Play.Failed"), do: {:error, "Play failed"}
 
   defp send_messages(socket, messages) do
     :ok = :gen_tcp.send(socket, Enum.map(messages, &Message.serialize/1))
