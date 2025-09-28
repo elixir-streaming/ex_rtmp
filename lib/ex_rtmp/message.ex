@@ -197,10 +197,10 @@ defmodule ExRTMP.Message do
     payload =
       case ExRTMP.AMF0.parse(IO.iodata_to_binary(payload)) do
         ["@setDataFrame", "onMetaData", metadata] ->
-          %Metadata{data: Map.new(metadata)}
+          %Metadata{data: metadata}
 
         ["onMetaData", metadata] ->
-          %Metadata{data: Map.new(metadata)}
+          %Metadata{data: metadata}
 
         other ->
           Logger.warning("Unknown parsed metadata: #{inspect(other)}")

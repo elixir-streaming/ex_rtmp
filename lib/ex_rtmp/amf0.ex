@@ -18,7 +18,7 @@ defmodule ExRTMP.AMF0 do
     [%{"key" => "value"}]
 
     iex> ExRTMP.AMF0.parse(<<8, 0, 0, 0, 1, 0, 3, 107, 101, 121, 2, 0, 5, 118, 97, 108, 117, 101, 0, 0, 9>>)
-    [[{"key", "value"}]]
+    [%{"key" => "value"}]
   """
   @spec parse(binary()) :: list()
   def parse(data), do: do_parse(data, [])
@@ -93,21 +93,10 @@ defmodule ExRTMP.AMF0 do
   defp parse_value(<<0x01::8, boolean::8, rest::binary>>), do: {boolean == 1, rest}
   defp parse_value(<<0x03::8, rest::binary>>), do: {:object_start, rest}
   defp parse_value(<<0x05::8, rest::binary>>), do: {nil, rest}
+  defp parse_value(<<0x08::8, _count::32, rest::binary>>), do: parse_object(rest, %{})
 
   defp parse_value(<<0x02::8, str_len::16, str::binary-size(str_len), rest::binary>>),
     do: {str, rest}
-
-  defp parse_value(<<0x08::8, count::32, rest::binary>>) do
-    {list, rest} =
-      Enum.map_reduce(1..count, rest, fn _idx, rest ->
-        {key, rest} = parse_object_key(rest)
-        {value, rest} = parse_value(rest)
-        {{key, value}, rest}
-      end)
-
-    <<0, 0, 9, rest::binary>> = rest
-    {list, rest}
-  end
 
   defp parse_value(<<0x0A::8, count::32, rest::binary>>) do
     Enum.map_reduce(1..count, rest, fn _idx, rest ->
