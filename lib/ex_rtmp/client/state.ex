@@ -14,6 +14,7 @@ defmodule ExRTMP.Client.State do
           stream_key: String.t(),
           socket: port() | nil,
           chunk_parser: ChunkParser.t(),
+          receiver: pid(),
           pending_peer: GenServer.from() | nil,
           pending_action: command() | nil,
           next_ts_id: non_neg_integer(),
@@ -27,6 +28,7 @@ defmodule ExRTMP.Client.State do
                 :socket,
                 :pending_peer,
                 :pending_action,
+                :receiver,
                 chunk_parser: ChunkParser.new(),
                 next_ts_id: 2,
                 window_ack_size: @default_window_ack_size,
@@ -62,5 +64,14 @@ defmodule ExRTMP.Client.State do
   @spec delete_stream(t(), Message.stream_id()) :: t()
   def delete_stream(state, stream_id) do
     %{state | streams: Map.delete(state.streams, stream_id)}
+  end
+
+  @doc false
+  @spec handle_video_message(t(), ExRTMP.Message.t()) :: {tuple() | nil, t()}
+  def handle_video_message(state, message) do
+    stream_ctx = state.streams[message.stream_id]
+    {result, stream_ctx} = StreamContext.handle_video_data(stream_ctx, message)
+    state = %{state | streams: Map.put(state.streams, stream_ctx.id, stream_ctx)}
+    {result, state}
   end
 end

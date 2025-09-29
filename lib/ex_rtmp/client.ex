@@ -15,6 +15,12 @@ defmodule ExRTMP.Client do
 
   @default_buffer_size 2_000_000
 
+  @type start_options :: [
+          {:uri, String.t()},
+          {:stream_key, String.t()},
+          {:name, GenServer.name()}
+        ]
+
   @doc """
   Starts and links a new RTMP client.
 
@@ -25,9 +31,20 @@ defmodule ExRTMP.Client do
 
     * `:name` - The name to register the client process. This option is optional.
   """
-  @spec start_link(keyword()) :: GenServer.on_start()
+  @spec start_link(start_options()) :: GenServer.on_start()
   def start_link(opts) do
+    opts = Keyword.put(opts, :receiver, self())
     GenServer.start_link(__MODULE__, opts, name: opts[:name])
+  end
+
+  @doc """
+  Starts a new RTMP client.
+
+  For available options see `start_link/1`.
+  """
+  @spec start(start_options()) :: GenServer.on_start()
+  def start(opts) do
+    GenServer.start(__MODULE__, opts, name: opts[:name])
   end
 
   @doc """
@@ -66,7 +83,7 @@ defmodule ExRTMP.Client do
   def init(opts) do
     uri = URI.parse(opts[:uri])
     uri = %URI{uri | port: uri.port || 1935}
-    state = %State{uri: uri, stream_key: opts[:stream_key]}
+    state = %State{uri: uri, stream_key: opts[:stream_key], receiver: opts[:receiver]}
     {:ok, state}
   end
 
@@ -168,13 +185,20 @@ defmodule ExRTMP.Client do
   end
 
   defp do_handle_message(%{type: 8}, state) do
-    Logger.debug("Received audio message")
+    # Logger.debug("Received audio message")
     state
   end
 
-  defp do_handle_message(%{type: 9}, state) do
-    Logger.debug("Received video message")
-    state
+  defp do_handle_message(%{type: 9} = msg, state) do
+    # Logger.debug("Received video message on stream: #{msg.stream_id}")
+    case State.handle_video_message(state, msg) do
+      {nil, state} ->
+        state
+
+      {data, state} ->
+        send(state.receiver, {:video, self(), msg.stream_id, data})
+        state
+    end
   end
 
   defp do_handle_message(%{type: 18} = msg, state) do

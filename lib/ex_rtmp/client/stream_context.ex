@@ -1,6 +1,8 @@
 defmodule ExRTMP.Client.StreamContext do
   @moduledoc false
 
+  alias ExRTMP.Client.MediaProcessor
+
   @type state :: :created | :playing | :publishing
   @type action :: :play | :publish | :delete
 
@@ -11,5 +13,21 @@ defmodule ExRTMP.Client.StreamContext do
           pending_peer: GenServer.from() | nil
         }
 
-  defstruct [:id, :pending_action, :pending_peer, state: :created]
+  defstruct [
+    :id,
+    :pending_action,
+    :pending_peer,
+    state: :created,
+    media_processor: MediaProcessor.new()
+  ]
+
+  @doc false
+  @spec handle_video_data(t(), ExRTMP.Message.t()) :: {tuple() | nil, t()}
+  def handle_video_data(stream_ctx, message) do
+    {data, processor} =
+      MediaProcessor.push_video(stream_ctx.media_processor, message.timestamp, message.payload)
+
+    stream_ctx = %{stream_ctx | media_processor: processor}
+    {data, stream_ctx}
+  end
 end
