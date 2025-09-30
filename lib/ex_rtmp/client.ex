@@ -7,7 +7,7 @@ defmodule ExRTMP.Client do
 
   require Logger
 
-  alias __MODULE__.State
+  alias __MODULE__.{Config, State}
   alias ExRTMP.ChunkParser
   alias ExRTMP.Message
   alias ExRTMP.Message.Command.NetConnection.{Connect, CreateStream, Response}
@@ -18,7 +18,8 @@ defmodule ExRTMP.Client do
   @type start_options :: [
           {:uri, String.t()},
           {:stream_key, String.t()},
-          {:name, GenServer.name()}
+          {:name, GenServer.name()},
+          {:receiver, Process.dest()}
         ]
 
   @doc """
@@ -33,7 +34,7 @@ defmodule ExRTMP.Client do
   """
   @spec start_link(start_options()) :: GenServer.on_start()
   def start_link(opts) do
-    opts = Keyword.put(opts, :receiver, self())
+    opts = Keyword.put_new(opts, :receiver, self())
     GenServer.start_link(__MODULE__, opts, name: opts[:name])
   end
 
@@ -81,9 +82,8 @@ defmodule ExRTMP.Client do
 
   @impl true
   def init(opts) do
-    uri = URI.parse(opts[:uri])
-    uri = %URI{uri | port: uri.port || 1935}
-    state = %State{uri: uri, stream_key: opts[:stream_key], receiver: opts[:receiver]}
+    opts = Config.validate!(opts)
+    state = %State{uri: opts[:uri], stream_key: opts[:stream_key], receiver: opts[:receiver]}
     {:ok, state}
   end
 
