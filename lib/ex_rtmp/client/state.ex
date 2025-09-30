@@ -67,10 +67,16 @@ defmodule ExRTMP.Client.State do
   end
 
   @doc false
-  @spec handle_video_message(t(), ExRTMP.Message.t()) :: {tuple() | nil, t()}
-  def handle_video_message(state, message) do
+  @spec handle_media_message(t(), ExRTMP.Message.t()) ::
+          {ExRTMP.Client.MediaProcessor.video_return(), t()}
+  def handle_media_message(state, message) do
     stream_ctx = state.streams[message.stream_id]
-    {result, stream_ctx} = StreamContext.handle_video_data(stream_ctx, message)
+
+    {result, stream_ctx} =
+      if message.type == 8,
+        do: StreamContext.handle_audio_data(stream_ctx, message),
+        else: StreamContext.handle_video_data(stream_ctx, message)
+
     state = %{state | streams: Map.put(state.streams, stream_ctx.id, stream_ctx)}
     {result, state}
   end

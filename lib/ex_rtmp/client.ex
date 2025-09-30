@@ -184,21 +184,14 @@ defmodule ExRTMP.Client do
     state
   end
 
-  defp do_handle_message(%{type: 8}, state) do
-    # Logger.debug("Received audio message")
-    state
+  defp do_handle_message(%{type: 8} = msg, state) do
+    Logger.debug("Received audio message on stream: #{msg.stream_id}")
+    do_handle_media_message(state, msg, :audio)
   end
 
   defp do_handle_message(%{type: 9} = msg, state) do
-    # Logger.debug("Received video message on stream: #{msg.stream_id}")
-    case State.handle_video_message(state, msg) do
-      {nil, state} ->
-        state
-
-      {data, state} ->
-        send(state.receiver, {:video, self(), msg.stream_id, data})
-        state
-    end
+    Logger.debug("Received video message on stream: #{msg.stream_id}")
+    do_handle_media_message(state, msg, :video)
   end
 
   defp do_handle_message(%{type: 18} = msg, state) do
@@ -244,6 +237,21 @@ defmodule ExRTMP.Client do
   defp do_handle_message(%{type: type} = message, state) do
     Logger.warning("Ignored message of type #{type}: #{inspect(message)}")
     state
+  end
+
+  defp do_handle_media_message(state, msg, media_type) do
+    case State.handle_media_message(state, msg) do
+      {nil, state} ->
+        state
+
+      {data, state} when is_list(data) ->
+        Enum.each(data, &send(state.receiver, {media_type, self(), msg.stream_id, &1}))
+        state
+
+      {data, state} ->
+        send(state.receiver, {media_type, self(), msg.stream_id, data})
+        state
+    end
   end
 
   defp handle_play_response(info, stream_ctx, state) do

@@ -22,10 +22,20 @@ defmodule ExRTMP.Client.StreamContext do
   ]
 
   @doc false
-  @spec handle_video_data(t(), ExRTMP.Message.t()) :: {tuple() | nil, t()}
+  @spec handle_video_data(t(), ExRTMP.Message.t()) :: {MediaProcessor.video_return(), t()}
   def handle_video_data(stream_ctx, message) do
     {data, processor} =
       MediaProcessor.push_video(stream_ctx.media_processor, message.timestamp, message.payload)
+
+    stream_ctx = %{stream_ctx | media_processor: processor}
+    {data, stream_ctx}
+  end
+
+  @doc false
+  @spec handle_audio_data(t(), ExRTMP.Message.t()) :: {MediaProcessor.audio_return(), t()}
+  def handle_audio_data(stream_ctx, message) do
+    {data, processor} =
+      MediaProcessor.push_audio(stream_ctx.media_processor, message.timestamp, message.payload)
 
     stream_ctx = %{stream_ctx | media_processor: processor}
     {data, stream_ctx}
