@@ -80,4 +80,10 @@ defmodule ExRTMP.Client.State do
     state = %{state | streams: Map.put(state.streams, stream_ctx.id, stream_ctx)}
     {result, state}
   end
+
+  @doc false
+  @spec reset(t()) :: t()
+  def reset(state) do
+    %__MODULE__{uri: state.uri, stream_key: state.stream_key, receiver: state.receiver}
+  end
 end

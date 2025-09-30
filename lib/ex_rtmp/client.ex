@@ -81,6 +81,11 @@ defmodule ExRTMP.Client do
   end
 
   @impl true
+  def stop(client) do
+    GenServer.call(client, :stop)
+  end
+
+  @impl true
   def init(opts) do
     opts = Config.validate!(opts)
     state = %State{uri: opts[:uri], stream_key: opts[:stream_key], receiver: opts[:receiver]}
@@ -122,13 +127,34 @@ defmodule ExRTMP.Client do
   def handle_call({:delete_stream, stream_id}, _from, state) do
     delete = DeleteStream.new(0, stream_id)
     send_messages(state.socket, [Message.command(delete, stream_id)])
-    {:reply, :ok, State.delete_stream(state, stream_id)}
+    {:reply, :ok, do_delete_stream(stream_id, state)}
+  end
+
+  @impl true
+  def hnandle_call(:stop, _from, state) do
+    if state.socket do
+      state =
+        state.streams
+        |> Map.keys()
+        |> Enum.each(&do_delete_stream(&1, state))
+
+      :ok = :gen_tcp.close(state.socket)
+      {:stop, :normal, :ok, %{state | socket: nil}}
+    else
+      {:stop, :normal, :ok, state}
+    end
   end
 
   @impl true
   def handle_info({:tcp, _port, data}, state) do
     {messages, parser} = ChunkParser.process(data, state.chunk_parser)
     {:noreply, Enum.reduce(messages, %{state | chunk_parser: parser}, &do_handle_message/2)}
+  end
+
+  @impl true
+  def handle_info({:tcp_closed, _port}, state) do
+    Logger.info("RTMP connection closed")
+    {:noreply, State.reset(state)}
   end
 
   defp do_connect(state, from) do
@@ -269,6 +295,12 @@ defmodule ExRTMP.Client do
         stream_ctx = %{stream_ctx | pending_peer: nil, pending_action: nil}
         %{state | streams: Map.put(state.streams, stream_ctx.id, stream_ctx)}
     end
+  end
+
+  defp do_delete_stream(stream_id, state) do
+    delete = DeleteStream.new(0, stream_id)
+    send_messages(state.socket, [Message.command(delete, stream_id)])
+    State.delete_stream(state, stream_id)
   end
 
   defp handle_play_resp_code("NetStream.Play.Start"), do: :ok
