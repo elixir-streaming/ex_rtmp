@@ -96,6 +96,14 @@ defmodule ExRTMP.Message do
   end
 
   @doc """
+  Builds a `User Control` message.
+  """
+  @spec ping_response(non_neg_integer()) :: t()
+  def ping_response(timestamp) do
+    new(Event.new(:ping_response, timestamp), type: 4, timestamp: 0, stream_id: 0)
+  end
+
+  @doc """
   Builds a `Command` message.
   """
   @spec command(any()) :: t()

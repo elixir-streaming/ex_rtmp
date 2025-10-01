@@ -12,6 +12,7 @@ defmodule ExRTMP.Client do
   alias ExRTMP.Message
   alias ExRTMP.Message.Command.NetConnection.{Connect, CreateStream, Response}
   alias ExRTMP.Message.Command.NetStream.{DeleteStream, OnStatus, Play}
+  alias ExRTMP.Message.UserControl.Event
 
   @default_buffer_size 2_000_000
 
@@ -80,7 +81,10 @@ defmodule ExRTMP.Client do
     GenServer.call(client, {:delete_stream, stream_id})
   end
 
-  @impl true
+  @doc """
+  Stops the RTMP client.
+  """
+  @spec stop(GenServer.name() | pid()) :: :ok
   def stop(client) do
     GenServer.call(client, :stop)
   end
@@ -131,12 +135,12 @@ defmodule ExRTMP.Client do
   end
 
   @impl true
-  def hnandle_call(:stop, _from, state) do
+  def handle_call(:stop, _from, state) do
     if state.socket do
       state =
         state.streams
         |> Map.keys()
-        |> Enum.each(&do_delete_stream(&1, state))
+        |> Enum.reduce(state, &do_delete_stream/2)
 
       :ok = :gen_tcp.close(state.socket)
       {:stop, :normal, :ok, %{state | socket: nil}}
@@ -197,6 +201,19 @@ defmodule ExRTMP.Client do
       _error ->
         Logger.error("RTMP handshake failed")
         {:error, :handshake_failed}
+    end
+  end
+
+  defp do_handle_message(%{type: 4, payload: user_event}, state) do
+    Logger.debug("Received user control message: #{inspect(user_event)}")
+
+    case user_event do
+      %Event{type: :ping_request, data: timestamp} ->
+        send_messages(state.socket, [Message.ping_response(timestamp)])
+        state
+
+      _event ->
+        state
     end
   end
 
