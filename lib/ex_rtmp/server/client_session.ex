@@ -156,10 +156,6 @@ defmodule ExRTMP.Server.ClientSession do
     Enum.reduce(messages, %{state | chunk_parser: parser}, &handle_message/2)
   end
 
-  defp handle_message(%{type: 1, payload: chunk_size}, state) do
-    %{state | chunk_parser: %{state.chunk_parser | chunk_size: chunk_size}}
-  end
-
   defp handle_message(%{type: 3, payload: received_bytes}, state) do
     Logger.debug(
       "Received window acknowledgement size message, received_bytes: #{received_bytes}"

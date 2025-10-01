@@ -35,6 +35,15 @@ defmodule ExRTMP.ChunkParser do
 
       {parser, acc} =
         case Message.append(message, payload) do
+          {:ok, %{type: 1, payload: chunk_size}} ->
+            parser = %{
+              parser
+              | messages: Map.delete(parser.messages, chunk.stream_id),
+                chunk_size: chunk_size
+            }
+
+            {parser, acc}
+
           {:ok, message} ->
             parser = %{parser | messages: Map.delete(parser.messages, chunk.stream_id)}
             {parser, [message | acc]}

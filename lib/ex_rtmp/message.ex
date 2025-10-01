@@ -5,11 +5,13 @@ defmodule ExRTMP.Message do
 
   require Logger
 
-  alias __MODULE__.Command.NetConnection.{Connect, CreateStream}
-  alias __MODULE__.Command.NetStream.{DeleteStream, Play, Publish}
+  alias __MODULE__.Command.NetConnection.{Connect, CreateStream, Response}
+  alias __MODULE__.Command.NetStream.{DeleteStream, OnStatus, Play, Publish}
   alias __MODULE__.Metadata
   alias __MODULE__.UserControl.Event
   alias ExRTMP.Chunk
+
+  @type stream_id :: non_neg_integer()
 
   @type t :: %__MODULE__{
           type: non_neg_integer(),
@@ -17,7 +19,7 @@ defmodule ExRTMP.Message do
           current_size: non_neg_integer() | nil,
           payload: iodata() | struct() | non_neg_integer(),
           timestamp: non_neg_integer(),
-          stream_id: non_neg_integer()
+          stream_id: stream_id()
         }
 
   defstruct [:type, :size, :current_size, :payload, :timestamp, :stream_id]
@@ -91,6 +93,14 @@ defmodule ExRTMP.Message do
   @spec stream_begin(non_neg_integer()) :: t()
   def stream_begin(stream_id) do
     new(Event.new(:stream_begin, stream_id), type: 4, timestamp: 0, stream_id: 0)
+  end
+
+  @doc """
+  Builds a `User Control` message.
+  """
+  @spec ping_response(non_neg_integer()) :: t()
+  def ping_response(timestamp) do
+    new(Event.new(:ping_response, timestamp), type: 4, timestamp: 0, stream_id: 0)
   end
 
   @doc """
@@ -186,14 +196,19 @@ defmodule ExRTMP.Message do
     %{msg | payload: win_size}
   end
 
+  defp parse_payload(%__MODULE__{type: 6, payload: payload} = msg) do
+    <<win_size::32, limit_type::8>> = IO.iodata_to_binary(payload)
+    %{msg | payload: {win_size, limit_type}}
+  end
+
   defp parse_payload(%__MODULE__{type: 18, payload: payload} = msg) do
     payload =
       case ExRTMP.AMF0.parse(IO.iodata_to_binary(payload)) do
         ["@setDataFrame", "onMetaData", metadata] ->
-          %Metadata{data: Map.new(metadata)}
+          %Metadata{data: metadata}
 
         ["onMetaData", metadata] ->
-          %Metadata{data: Map.new(metadata)}
+          %Metadata{data: metadata}
 
         other ->
           Logger.warning("Unknown parsed metadata: #{inspect(other)}")
@@ -213,6 +228,14 @@ defmodule ExRTMP.Message do
         ["createStream", transaction_id | _rest] ->
           %CreateStream{transaction_id: transaction_id}
 
+        [result, transaction_id, command_object, data] when result in ["_result", "_error"] ->
+          %Response{
+            result: result,
+            transaction_id: trunc(transaction_id),
+            command_object: command_object,
+            data: data
+          }
+
         ["publish", transaction_id, nil, name, type] ->
           Publish.new(transaction_id, name, type)
 
@@ -229,6 +252,9 @@ defmodule ExRTMP.Message do
             end
 
           Play.new(transaction_id, stream_name, play_opts)
+
+        ["onStatus", _ts_id, nil, info] ->
+          %OnStatus{info: info}
 
         other ->
           Logger.warning("Unknown command: #{inspect(List.first(other))}")

@@ -32,7 +32,7 @@ defmodule ExRTMP.AMF0Test do
       <<8, 0, 0, 0, 2, 0, 8, 100, 117, 114, 97, 116, 105, 111, 110, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         5, 119, 105, 100, 116, 104, 0, 64, 158, 0, 0, 0, 0, 0, 0, 0, 0, 9>>
 
-    assert [[{"duration", 0.0}, {"width", 1920.0}]] == AMF0.parse(payload)
+    assert [%{"duration" => 0.0, "width" => 1920.0}] == AMF0.parse(payload)
   end
 
   test "serialize" do

@@ -19,13 +19,48 @@ defmodule ExRTMP.Message.UserControl.Event do
 
   defstruct [:type, :data]
 
+  @doc """
+  Creates a new user control event message payload.
+  """
   @spec new(type(), any()) :: t()
   def new(type, data) do
     %__MODULE__{type: type, data: data}
   end
 
+  @doc """
+  Parses a binary into a user control event message payload.
+
+  ## Examples
+
+      iex> ExRTMP.Message.UserControl.Event.parse(<<0, 0, 0, 0, 0, 1>>)
+      {:ok, %ExRTMP.Message.UserControl.Event{type: :stream_begin, data: 1}}
+
+      iex> ExRTMP.Message.UserControl.Event.parse(<<0, 1, 0, 0, 0, 3>>)
+      {:ok, %ExRTMP.Message.UserControl.Event{type: :stream_eof, data: 3}}
+
+      iex> ExRTMP.Message.UserControl.Event.parse(<<0, 2, 0, 0, 0, 5>>)
+      {:ok, %ExRTMP.Message.UserControl.Event{type: :stream_dry, data: 5}}
+
+      iex> ExRTMP.Message.UserControl.Event.parse(<<0, 3, 0, 0, 0, 4, 0, 0, 3, 232>>)
+      {:ok, %ExRTMP.Message.UserControl.Event{type: :set_buffer_length, data: {4, 1000}}}
+
+      iex> ExRTMP.Message.UserControl.Event.parse(<<0, 4, 0, 0, 0, 2>>)
+      {:ok, %ExRTMP.Message.UserControl.Event{type: :stream_is_recorded, data: 2}}
+
+      iex> ExRTMP.Message.UserControl.Event.parse(<<0, 6, 104, 220, 201, 210>>)
+      {:ok, %ExRTMP.Message.UserControl.Event{type: :ping_request, data: 1759300050}}
+
+      iex> ExRTMP.Message.UserControl.Event.parse(<<0, 7, 104, 220, 201, 210>>)
+      {:ok, %ExRTMP.Message.UserControl.Event{type: :ping_response, data: 1759300050}}
+
+      iex> ExRTMP.Message.UserControl.Event.parse(<<0, 8, 0, 1, 0, 0, 0, 42>>)
+      {:error, :unknown_type}
+
+      iex> ExRTMP.Message.UserControl.Event.parse(<<0, 3, 0, 1, 0, 0, 0, 42>>)
+      {:error, :invalid_payload}
+  """
   @spec parse(binary()) :: {:ok, t()} | {:error, atom()}
-  def parse(<<type::16, rest::binary>>) when type in 0..7 do
+  def parse(<<type::16, rest::binary>> = _payload) when type in 0..7 do
     case parse_payload(type, rest) do
       {:ok, event_type, data} -> {:ok, %__MODULE__{type: event_type, data: data}}
       {:error, reason} -> {:error, reason}
