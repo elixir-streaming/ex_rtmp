@@ -9,10 +9,10 @@ defmodule ExRTMP.Message.Command.NetConnection.Response do
           result: String.t(),
           transaction_id: number(),
           command_object: map(),
-          data: any()
+          data: map()
         }
 
-  defstruct [:result, :transaction_id, :command_object, :data]
+  defstruct [:result, :transaction_id, :command_object, data: %{}]
 
   @spec ok(number()) :: t()
   @spec ok(number(), keyword() | nil) :: t()
@@ -57,7 +57,7 @@ defmodule ExRTMP.Message.Command.NetConnection.Response do
         AMF0.serialize(response.result),
         AMF0.serialize(response.transaction_id),
         AMF0.serialize(response.command_object),
-        if(response.data, do: AMF0.serialize(response.data), else: <<>>)
+        AMF0.serialize(response.data)
       ]
     end
   end
