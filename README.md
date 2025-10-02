@@ -12,7 +12,7 @@ The package can be installed by adding `ex_rtmp` to your list of dependencies in
 ```elixir
 def deps do
   [
-    {:ex_rtmp, "~> 0.1.0"}
+    {:ex_rtmp, "~> 0.2.0"}
   ]
 end
 ```
@@ -39,4 +39,10 @@ elixir examples/send_mp4.exs "input_file.mp4"
 and to play the stream, you can use `vlc` or `ffplay`:
 ```bash
 ffplay -i rtmp://localhost:1935/live/test
+```
+
+### `read_to_flv.exs`
+A client connects to an RTMP server and saves the stream into an flv file.
+```elixir
+elixir examples/read_to_flv.exs "rtmp://localhost:1935/live" test output.flv
 ```
