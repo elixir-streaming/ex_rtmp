@@ -65,6 +65,7 @@ defmodule ExRTMP.MixProject do
       groups_for_modules: [
         Core: [
           "ExRTMP",
+          ~r/^ExRTMP\.Client($|\.)/,
           ~r/^ExRTMP\.Server($|\.)/,
           "ExRTMP.Chunk",
           "ExRTMP.Message",

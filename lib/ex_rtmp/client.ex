@@ -29,7 +29,7 @@ defmodule ExRTMP.Client do
   ## Options
     * `:uri` - The RTMP server URI to connect to. This option is required.
 
-    * `:stream_key` - The stream key to use when publishing a stream. This option is required.
+    * `:stream_key` - The stream key. This option is required.
 
     * `:name` - The name to register the client process. This option is optional.
   """
