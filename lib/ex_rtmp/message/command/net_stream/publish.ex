@@ -1,5 +1,7 @@
 defmodule ExRTMP.Message.Command.NetStream.Publish do
-  @moduledoc false
+  @moduledoc """
+  Struct representing a "publish" command message for RTMP NetStream.
+  """
 
   @type publishing_type :: :live | :record | :append
 
