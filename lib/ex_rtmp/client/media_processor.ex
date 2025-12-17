@@ -28,7 +28,7 @@ defmodule ExRTMP.Client.MediaProcessor do
   def push_video(processor, timestamp, data) do
     data
     |> IO.iodata_to_binary()
-    |> VideoData.parse()
+    |> VideoData.parse!()
     |> handle_video_tag(timestamp, processor)
   end
 
@@ -36,7 +36,7 @@ defmodule ExRTMP.Client.MediaProcessor do
   def push_audio(processor, timestamp, data) do
     data
     |> IO.iodata_to_binary()
-    |> AudioData.parse()
+    |> AudioData.parse!()
     |> handle_audio_tag(timestamp, processor)
   end
 

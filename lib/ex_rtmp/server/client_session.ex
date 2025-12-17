@@ -19,8 +19,7 @@ defmodule ExRTMP.Server.ClientSession do
   defmodule State do
     @moduledoc false
 
-    @type state :: :init | :connected
-    @type stream_state :: :created | :publishing | :playing
+    @type state :: :init | :connected | :publishing | :playing
 
     @type t :: %__MODULE__{
             socket: :inet.socket(),
@@ -28,8 +27,7 @@ defmodule ExRTMP.Server.ClientSession do
             handler_mod: module(),
             handler_state: any(),
             state: state(),
-            streams_state: %{optional(non_neg_integer()) => stream_state()},
-            next_stream_id: non_neg_integer()
+            stream_id: non_neg_integer() | nil
           }
 
     @enforce_keys [:socket]
@@ -39,8 +37,7 @@ defmodule ExRTMP.Server.ClientSession do
                   :handler_state,
                   chunk_parser: ChunkParser.new(),
                   state: :init,
-                  streams_state: %{},
-                  next_stream_id: 1
+                  stream_id: nil
                 ]
   end
 
@@ -53,25 +50,25 @@ defmodule ExRTMP.Server.ClientSession do
   @doc """
   Sends video data to the client.
   """
-  @spec send_video_data(pid(), non_neg_integer(), non_neg_integer(), iodata()) :: :ok
-  def send_video_data(pid, stream_id, timestamp, data) do
-    GenServer.cast(pid, {:video_data, stream_id, timestamp, data})
+  @spec send_video_data(pid(), non_neg_integer(), iodata()) :: :ok
+  def send_video_data(pid, timestamp, data) do
+    GenServer.cast(pid, {:video_data, timestamp, data})
   end
 
   @doc """
   Sends audio data to the client.
   """
-  @spec send_audio_data(pid(), non_neg_integer(), non_neg_integer(), iodata()) :: :ok
-  def send_audio_data(pid, stream_id, timestamp, data) do
-    GenServer.cast(pid, {:audio_data, stream_id, timestamp, data})
+  @spec send_audio_data(pid(), non_neg_integer(), iodata()) :: :ok
+  def send_audio_data(pid, timestamp, data) do
+    GenServer.cast(pid, {:audio_data, timestamp, data})
   end
 
   @doc """
   Sends metadata about the media to the client.
   """
-  @spec send_metadata(pid(), non_neg_integer(), map()) :: :ok
-  def send_metadata(pid, stream_id, data) do
-    GenServer.cast(pid, {:metadata, stream_id, data})
+  @spec send_metadata(pid(), map()) :: :ok
+  def send_metadata(pid, data) do
+    GenServer.cast(pid, {:metadata, data})
   end
 
   @impl true
@@ -91,7 +88,7 @@ defmodule ExRTMP.Server.ClientSession do
   def handle_continue(:handshake, state) do
     case do_handle_handshake(state.socket) do
       :ok ->
-        Logger.info("RTMP Handshake successful")
+        Logger.debug("RTMP Handshake successful")
         {:ok, data} = :gen_tcp.recv(state.socket, 0)
         :ok = :inet.setopts(state.socket, active: true)
         {:noreply, do_handle_data(state, data)}
@@ -102,20 +99,20 @@ defmodule ExRTMP.Server.ClientSession do
   end
 
   @impl true
-  def handle_cast({:video_data, stream_id, timestamp, data}, state) do
-    send_media(:video, state.socket, stream_id, timestamp, data)
+  def handle_cast({:video_data, timestamp, data}, state) do
+    send_media(:video, state.socket, state.stream_id, timestamp, data)
     {:noreply, state}
   end
 
   @impl true
-  def handle_cast({:audio_data, stream_id, timestamp, data}, state) do
-    send_media(:audio, state.socket, stream_id, timestamp, data)
+  def handle_cast({:audio_data, timestamp, data}, state) do
+    send_media(:audio, state.socket, state.stream_id, timestamp, data)
     {:noreply, state}
   end
 
   @impl true
-  def handle_cast({:metadata, stream_id, data}, state) do
-    message = Message.metadata(data, stream_id)
+  def handle_cast({:metadata, data}, state) do
+    message = Message.metadata(data, state.stream_id)
     :ok = :gen_tcp.send(state.socket, Message.serialize(message))
     {:noreply, state}
   end
@@ -127,6 +124,11 @@ defmodule ExRTMP.Server.ClientSession do
 
   @impl true
   def handle_info({:tcp_closed, _port}, state) do
+    {:stop, :normal, state}
+  end
+
+  @impl true
+  def handle_info(:exit, state) do
     {:stop, :normal, state}
   end
 
@@ -174,52 +176,32 @@ defmodule ExRTMP.Server.ClientSession do
     state
   end
 
-  defp handle_message(%{type: 8} = message, state) do
-    case state.streams_state[message.stream_id] do
-      :publishing ->
-        handler_state =
-          state.handler_mod.handle_audio_data(
-            message.stream_id,
-            message.timestamp,
-            message.payload,
-            state.handler_state
-          )
+  defp handle_message(%{type: 8} = message, %{state: :publishing} = state) do
+    handler_state =
+      state.handler_mod.handle_audio_data(
+        message.timestamp,
+        message.payload,
+        state.handler_state
+      )
 
-        %{state | handler_state: handler_state}
-
-      _other ->
-        state
-    end
+    %{state | handler_state: handler_state}
   end
 
-  defp handle_message(%{type: 9} = message, state) do
-    case state.streams_state[message.stream_id] do
-      :publishing ->
-        handler_state =
-          state.handler_mod.handle_video_data(
-            message.stream_id,
-            message.timestamp,
-            message.payload,
-            state.handler_state
-          )
+  defp handle_message(%{type: 9} = message, %{state: :publishing} = state) do
+    handler_state =
+      state.handler_mod.handle_video_data(
+        message.timestamp,
+        message.payload,
+        state.handler_state
+      )
 
-        %{state | handler_state: handler_state}
-
-      _other ->
-        state
-    end
+    %{state | handler_state: handler_state}
   end
 
-  defp handle_message(%{type: 18, payload: %Metadata{data: data}} = message, state) do
-    %{
-      state
-      | handler_state:
-          state.handler_mod.handle_metadata(
-            message.stream_id,
-            data,
-            state.handler_state
-          )
-    }
+  defp handle_message(%{type: type}, state) when type == 8 or type == 9, do: state
+
+  defp handle_message(%{type: 18, payload: %Metadata{data: data}}, state) do
+    %{state | handler_state: state.handler_mod.handle_metadata(data, state.handler_state)}
   end
 
   defp handle_message(%{type: 20} = message, state) do
@@ -272,112 +254,81 @@ defmodule ExRTMP.Server.ClientSession do
     end
   end
 
-  defp handle_create_stream_message(create_stream, %{state: :connected} = state) do
-    transaction_id = create_stream.transaction_id
+  defp handle_create_stream_message(create_stream, %{state: :connected, stream_id: nil} = state) do
+    message =
+      create_stream.transaction_id
+      |> Response.ok(data: 1)
+      |> Message.command()
 
-    case state.handler_mod.handle_create_stream(state.handler_state) do
+    {[message], %{state | stream_id: 1}}
+  end
+
+  defp handle_create_stream_message(%{transaction_id: id}, state) do
+    reason = if state.state != :connected, do: "Not Connected", else: "Stream Already Created"
+    {[Message.command(Response.create_stream_failed(id, reason))], state}
+  end
+
+  defp handle_publish_message(
+         publish,
+         stream_id,
+         %{state: :connected, stream_id: stream_id} = state
+       ) do
+    Logger.debug("Received publish command for #{publish.name} on stream: #{stream_id}")
+
+    case state.handler_mod.handle_publish(publish.name, state.handler_state) do
       {:ok, handler_state} ->
-        message =
-          transaction_id
-          |> Response.ok(data: state.next_stream_id)
-          |> Message.command()
+        state = %{state | handler_state: handler_state, state: :publishing}
 
-        state = %{
-          state
-          | handler_state: handler_state,
-            next_stream_id: state.next_stream_id + 1,
-            streams_state: Map.put(state.streams_state, state.next_stream_id, :created)
-        }
+        messages = [
+          Message.stream_begin(stream_id),
+          Message.command(OnStatus.publish_ok(), stream_id)
+        ]
 
-        {[message], state}
+        {messages, state}
 
       {:error, reason} ->
-        {[Message.command(Response.create_stream_failed(transaction_id, reason))], state}
+        {[Message.command(OnStatus.publish_failed(reason), stream_id)], state}
     end
   end
 
-  defp handle_create_stream_message(create_stream, state) do
-    transaction_id = create_stream.transaction_id
-    {[Message.command(Response.create_stream_failed(transaction_id, "Not Connected"))], state}
+  defp handle_publish_message(_publish, stream_id, state) do
+    {[Message.command(OnStatus.publish_bad_stream(), stream_id)], state}
   end
 
-  defp handle_publish_message(publish, stream_id, state) do
-    stream_state = Map.get(state.streams_state, stream_id)
-
-    cond do
-      is_nil(stream_state) ->
-        {[Message.command(OnStatus.publish_bad_stream(), stream_id)], state}
-
-      stream_state != :created ->
-        message = Message.command(OnStatus.publish_failed("Stream is #{stream_state}"), stream_id)
-        {[message], state}
-
-      true ->
-        case state.handler_mod.handle_publish(stream_id, publish.name, state.handler_state) do
-          {:ok, handler_state} ->
-            state = %{
-              state
-              | handler_state: handler_state,
-                streams_state: Map.put(state.streams_state, stream_id, :publishing)
-            }
-
-            messages = [
-              Message.stream_begin(stream_id),
-              Message.command(OnStatus.publish_ok(), stream_id)
-            ]
-
-            {messages, state}
-
-          {:error, reason} ->
-            {[Message.command(OnStatus.publish_failed(reason), stream_id)], state}
-        end
-    end
-  end
-
-  defp handle_play_message(play, stream_id, state) do
+  defp handle_play_message(play, stream_id, %{state: :connected, stream_id: stream_id} = state) do
     Logger.debug("Received play command for #{play.name} on stream: #{stream_id}")
-    stream_state = Map.get(state.streams_state, stream_id)
 
-    cond do
-      is_nil(stream_state) ->
-        {[Message.command(OnStatus.play_bad_stream(), stream_id)], state}
+    case state.handler_mod.handle_play(play, state.handler_state) do
+      {:ok, handler_state} ->
+        state = %{state | handler_state: handler_state, state: :playing}
 
-      stream_state != :created ->
-        message = Message.command(OnStatus.play_failed("Stream is #{stream_state}"), stream_id)
-        {[message], state}
+        messages = [
+          Message.stream_begin(stream_id),
+          Message.command(OnStatus.play_ok(), stream_id)
+        ]
 
-      true ->
-        case state.handler_mod.handle_play(stream_id, play, state.handler_state) do
-          {:ok, handler_state} ->
-            state = %{
-              state
-              | handler_state: handler_state,
-                streams_state: Map.put(state.streams_state, stream_id, :playing)
-            }
+        {messages, state}
 
-            messages = [
-              Message.stream_begin(stream_id),
-              Message.command(OnStatus.play_ok(), stream_id)
-            ]
-
-            {messages, state}
-
-          {:error, reason} ->
-            {[Message.command(OnStatus.play_failed(reason), stream_id)], state}
-        end
+      {:error, reason} ->
+        {[Message.command(OnStatus.play_failed(reason), stream_id)], state}
     end
+  end
+
+  defp handle_play_message(_play, stream_id, state) do
+    {[Message.command(OnStatus.play_bad_stream(), stream_id)], state}
   end
 
   defp handle_delete_stream(stream_id, state) do
-    Logger.debug("Received delete stream commad on stream: #{stream_id}")
+    Logger.debug("Received delete stream command on stream: #{stream_id}")
 
-    state = %{
-      state
-      | streams_state: Map.delete(state.streams_state, stream_id),
-        handler_state: state.handler_mod.handle_delete_stream(stream_id, state.handler_state)
-    }
+    case state.handler_mod.handle_delete_stream(state.handler_state) do
+      :close ->
+        send(self(), :exit)
+        {[], state}
 
-    {[], state}
+      handler_state ->
+        {[], %{state | stream_id: nil, handler_state: handler_state}}
+    end
   end
 
   defp send_media(media, socket, stream_id, timestamp, data) do
