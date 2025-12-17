@@ -50,14 +50,8 @@ defmodule ExRTMP.Chunk do
     msg_stream_id =
       if chunk.message_stream_id, do: <<chunk.message_stream_id::integer-32-little>>, else: <<>>
 
-    [
-      <<chunk.fmt::2, encode_stream_id(chunk.stream_id)::bitstring>>,
-      timestamp,
-      length,
-      type_id,
-      msg_stream_id,
-      chunk.payload
-    ]
+    <<chunk.fmt::2, encode_stream_id(chunk.stream_id)::bitstring, timestamp::binary,
+      length::binary, type_id::binary, msg_stream_id::binary, chunk.payload::binary>>
   end
 
   defp parse_stream_id(data) do

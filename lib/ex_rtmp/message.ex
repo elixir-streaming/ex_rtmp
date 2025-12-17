@@ -6,7 +6,7 @@ defmodule ExRTMP.Message do
   require Logger
 
   alias __MODULE__.Command.NetConnection.{Connect, CreateStream, Response}
-  alias __MODULE__.Command.NetStream.{DeleteStream, OnStatus, Play, Publish}
+  alias __MODULE__.Command.NetStream.{DeleteStream, FCPublish, OnStatus, Play, Publish}
   alias __MODULE__.Metadata
   alias __MODULE__.UserControl.Event
   alias ExRTMP.Chunk
@@ -238,6 +238,9 @@ defmodule ExRTMP.Message do
 
         ["publish", transaction_id, nil, name, type] ->
           Publish.new(transaction_id, name, type)
+
+        ["FCPublish", transaction_id, nil, name] ->
+          FCPublish.new(transaction_id, name)
 
         ["deleteStream", transaction_id, nil, stream_id] ->
           DeleteStream.new(transaction_id, stream_id)

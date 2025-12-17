@@ -12,7 +12,7 @@ defmodule ExRTMP.Server.ClientSession do
   alias ExRTMP.Message
   alias ExRTMP.Message.Command.NetConnection
   alias ExRTMP.Message.Command.NetConnection.{CreateStream, Response}
-  alias ExRTMP.Message.Command.NetStream.{DeleteStream, Play, Publish, OnStatus}
+  alias ExRTMP.Message.Command.NetStream.{DeleteStream, FCPublish, Play, Publish, OnStatus}
   alias ExRTMP.Message.Metadata
 
   @default_acknowledgement_size 3_000_000
@@ -236,6 +236,10 @@ defmodule ExRTMP.Server.ClientSession do
 
         %CreateStream{} ->
           handle_create_stream_message(message.payload, state)
+
+        %FCPublish{transaction_id: id} ->
+          send_messages(state, [Message.command(Response.ok(id))])
+          {[], state}
 
         %Publish{} ->
           handle_publish_message(message.payload, message.stream_id, state)
