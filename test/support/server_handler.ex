@@ -4,7 +4,7 @@ defmodule ExRTMP.ServerHandler do
   use ExRTMP.Server.Handler
 
   alias MediaCodecs.H264
-  alias ExFLV.Tag.{AVCVideoPacket, VideoData}
+  alias ExFLV.Tag.{VideoData, VideoData.AVC}
   alias ExRTMP.Server.ClientSession
   alias MediaCodecs.H264.NaluSplitter
   alias MediaCodecs.H264.AccessUnitSplitter
@@ -16,23 +16,23 @@ defmodule ExRTMP.ServerHandler do
   def init(opts), do: opts
 
   @impl true
-  def handle_play(stream_id, %{name: "test"}, state) do
+  def handle_play(%{name: "test"}, state) do
     pid = self()
-    spawn(fn -> send_video(pid, stream_id) end)
+    spawn(fn -> send_video(pid) end)
     {:ok, state}
   end
 
   @impl true
-  def handle_play(_stream_id, _play, _state) do
+  def handle_play(_play, _state) do
     {:error, "Stream not found"}
   end
 
-  defp send_video(pid, stream_id) do
+  defp send_video(pid) do
     @dcr
-    |> AVCVideoPacket.new(:sequence_header, 0)
+    |> AVC.new(:sequence_header, 0)
     |> VideoData.new(:avc, :keyframe)
     |> ExFLV.Tag.Serializer.serialize()
-    |> then(&ClientSession.send_video_data(pid, stream_id, 0, &1))
+    |> then(&ClientSession.send_video_data(pid, 0, &1))
 
     "test/fixtures/video.h264"
     |> File.stream!(2048)
@@ -42,10 +42,10 @@ defmodule ExRTMP.ServerHandler do
 
       access_unit
       |> Enum.map(&[<<byte_size(&1)::32>>, &1])
-      |> AVCVideoPacket.new(:nalu, 0)
+      |> AVC.new(:nalu, 0)
       |> VideoData.new(:avc, if(keyframe?, do: :keyframe, else: :interframe))
       |> ExFLV.Tag.Serializer.serialize()
-      |> then(&ClientSession.send_video_data(pid, stream_id, timestamp, &1))
+      |> then(&ClientSession.send_video_data(pid, timestamp, &1))
 
       timestamp + 50
     end)

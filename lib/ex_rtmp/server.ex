@@ -70,6 +70,8 @@ defmodule ExRTMP.Server do
 
     {:ok, server_socket} = :gen_tcp.listen(port, [:binary, active: false, reuseaddr: true])
 
+    Logger.info("RTMP Server listening on port #{port}")
+
     state = %{
       socket: server_socket,
       pid: self(),

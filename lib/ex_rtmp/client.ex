@@ -193,7 +193,7 @@ defmodule ExRTMP.Client do
     with :ok <- :gen_tcp.send(socket, [3]),
          :ok <- :gen_tcp.send(socket, [<<0::32>>, <<0::32>>, rand_bytes]),
          {:ok, <<0x03::8>>} <- :gen_tcp.recv(socket, 1),
-         {:ok, <<timestamp::32, 0::32, r::binary-size(1528)>>} <- :gen_tcp.recv(socket, 1536),
+         {:ok, <<timestamp::32, _::32, r::binary-size(1528)>>} <- :gen_tcp.recv(socket, 1536),
          :ok <- :gen_tcp.send(socket, <<timestamp::32, 0::32, r::binary>>),
          {:ok, <<0::32, _::32, ^rand_bytes::binary>>} <- :gen_tcp.recv(socket, 1536) do
       :ok
