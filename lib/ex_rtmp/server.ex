@@ -4,6 +4,19 @@ defmodule ExRTMP.Server do
 
   The server listens for incoming RTMP client connections and spawns a new
   `ExRTMP.Server.ClientSession` process for each connected client.
+
+  ## Handling Media
+    When `demux` is set to `true`, the server will demux the incoming RTMP
+    streams into audio and video frames before passing them to the handler module.
+
+    The format of the data received by the handler is:
+    * `{:codec, codec_type, init_data}` - The codec type and initialization data.
+    * `{:sample, payload, dts, pts, keyframe?}` - A video sample, the payload depends on the codec type. In the case of `avc`,
+      the payload is a list of NAL units, for other codecs, it is the raw video frame data.
+    * `{:sample, payload, timestamp}` - An audio sample.
+
+    If `demux` is set to `false`, the handler module will receive the raw RTMP
+    data as is.
   """
 
   use GenServer
@@ -15,7 +28,8 @@ defmodule ExRTMP.Server do
   @type start_options :: [
           {:port, :inet.port_number()},
           {:handler, module()},
-          {:handler_options, any()}
+          {:handler_options, any()},
+          {:demux, boolean()}
         ]
 
   @default_port 1935
@@ -42,6 +56,9 @@ defmodule ExRTMP.Server do
 
     * `handler_options` - A keyword list of options that will be passed to the
       handler module when it is started. This option is optional.
+
+    * `demux` - Whether the server will demux the incoming RTMP streams into
+      audio and video frames. Defaults to `true`. See [Handling Media](#module-handling-media) below.
   """
   @spec start_link(start_options()) :: GenServer.on_start()
   def start_link(opts) do
@@ -76,7 +93,8 @@ defmodule ExRTMP.Server do
       socket: server_socket,
       pid: self(),
       handler: opts[:handler] || raise("Handler module is required"),
-      handler_options: opts[:handler_options]
+      handler_options: opts[:handler_options],
+      demux: Keyword.get(opts, :demux, true)
     }
 
     listener = spawn_link(fn -> accept_client_connection(state) end)
@@ -121,7 +139,8 @@ defmodule ExRTMP.Server do
           ClientSession.start(
             socket: client_socket,
             handler: state.handler,
-            handler_options: state.handler_options
+            handler_options: state.handler_options,
+            demux: state.demux
           )
 
         :ok = :gen_tcp.controlling_process(client_socket, pid)

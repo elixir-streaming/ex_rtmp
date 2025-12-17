@@ -8,6 +8,7 @@ defmodule ExRTMP.Server.ClientSession do
   require Logger
 
   alias ExRTMP.ChunkParser
+  alias ExRTMP.Client.MediaProcessor
   alias ExRTMP.Message
   alias ExRTMP.Message.Command.NetConnection
   alias ExRTMP.Message.Command.NetConnection.{CreateStream, Response}
@@ -27,7 +28,8 @@ defmodule ExRTMP.Server.ClientSession do
             handler_mod: module(),
             handler_state: any(),
             state: state(),
-            stream_id: non_neg_integer() | nil
+            stream_id: non_neg_integer() | nil,
+            media_processor: MediaProcessor.t() | nil
           }
 
     @enforce_keys [:socket]
@@ -35,6 +37,7 @@ defmodule ExRTMP.Server.ClientSession do
                 [
                   :handler_mod,
                   :handler_state,
+                  :media_processor,
                   chunk_parser: ChunkParser.new(),
                   state: :init,
                   stream_id: nil
@@ -78,7 +81,8 @@ defmodule ExRTMP.Server.ClientSession do
     state = %State{
       handler_mod: handler_mod,
       handler_state: handler_mod.init(options[:handler_options]),
-      socket: options[:socket]
+      socket: options[:socket],
+      media_processor: if(options[:demux], do: MediaProcessor.new())
     }
 
     {:ok, state, {:continue, :handshake}}
@@ -176,7 +180,7 @@ defmodule ExRTMP.Server.ClientSession do
     state
   end
 
-  defp handle_message(%{type: 8} = message, %{state: :publishing} = state) do
+  defp handle_message(%{type: 8} = message, %{state: :publishing, media_processor: nil} = state) do
     handler_state =
       state.handler_mod.handle_audio_data(
         message.timestamp,
@@ -187,7 +191,17 @@ defmodule ExRTMP.Server.ClientSession do
     %{state | handler_state: handler_state}
   end
 
-  defp handle_message(%{type: 9} = message, %{state: :publishing} = state) do
+  defp handle_message(%{type: 8} = message, %{state: :publishing} = state) do
+    {media, processor} = MediaProcessor.push_audio(message, state.media_processor)
+    mod = state.handler_mod
+
+    handler_state =
+      Enum.reduce(List.wrap(media), state.handler_state, &mod.handle_audio_data(0, &1, &2))
+
+    %{state | handler_state: handler_state, media_processor: processor}
+  end
+
+  defp handle_message(%{type: 9} = message, %{state: :publishing, media_processor: nil} = state) do
     handler_state =
       state.handler_mod.handle_video_data(
         message.timestamp,
@@ -196,6 +210,16 @@ defmodule ExRTMP.Server.ClientSession do
       )
 
     %{state | handler_state: handler_state}
+  end
+
+  defp handle_message(%{type: 9} = message, %{state: :publishing} = state) do
+    {media, processor} = MediaProcessor.push_video(message, state.media_processor)
+    mod = state.handler_mod
+
+    handler_state =
+      Enum.reduce(List.wrap(media), state.handler_state, &mod.handle_video_data(0, &1, &2))
+
+    %{state | handler_state: handler_state, media_processor: processor}
   end
 
   defp handle_message(%{type: type}, state) when type == 8 or type == 9, do: state
