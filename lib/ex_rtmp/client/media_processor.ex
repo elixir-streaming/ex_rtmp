@@ -2,6 +2,7 @@ defmodule ExRTMP.Client.MediaProcessor do
   @moduledoc false
 
   alias ExFLV.Tag.{AudioData, VideoData}
+  alias ExRTMP.Message
 
   @type track :: {:codec, atom(), binary()}
   @type video_sample ::
@@ -24,20 +25,20 @@ defmodule ExRTMP.Client.MediaProcessor do
   @spec new() :: t()
   def new(), do: %__MODULE__{}
 
-  @spec push_video(t(), non_neg_integer(), iodata()) :: {video_return(), t()}
-  def push_video(processor, timestamp, data) do
-    data
+  @spec push_video(Message.t(), t()) :: {video_return(), t()}
+  def push_video(message, processor) do
+    message.payload
     |> IO.iodata_to_binary()
     |> VideoData.parse!()
-    |> handle_video_tag(timestamp, processor)
+    |> handle_video_tag(message.timestamp, processor)
   end
 
-  @spec push_audio(t(), non_neg_integer(), iodata()) :: {audio_return(), t()}
-  def push_audio(processor, timestamp, data) do
-    data
+  @spec push_audio(Message.t(), t()) :: {audio_return(), t()}
+  def push_audio(message, processor) do
+    message.payload
     |> IO.iodata_to_binary()
     |> AudioData.parse!()
-    |> handle_audio_tag(timestamp, processor)
+    |> handle_audio_tag(message.timestamp, processor)
   end
 
   defp handle_video_tag(%VideoData{codec_id: :avc} = tag, timestamp, processor) do

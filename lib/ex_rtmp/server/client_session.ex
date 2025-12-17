@@ -192,9 +192,7 @@ defmodule ExRTMP.Server.ClientSession do
   end
 
   defp handle_message(%{type: 8} = message, %{state: :publishing} = state) do
-    {media, processor} =
-      MediaProcessor.push_audio(state.media_processor, message.timestamp, message.payload)
-
+    {media, processor} = MediaProcessor.push_audio(message, state.media_processor)
     mod = state.handler_mod
 
     handler_state =
@@ -215,9 +213,7 @@ defmodule ExRTMP.Server.ClientSession do
   end
 
   defp handle_message(%{type: 9} = message, %{state: :publishing} = state) do
-    {media, processor} =
-      MediaProcessor.push_video(state.media_processor, message.timestamp, message.payload)
-
+    {media, processor} = MediaProcessor.push_video(message, state.media_processor)
     mod = state.handler_mod
 
     handler_state =
