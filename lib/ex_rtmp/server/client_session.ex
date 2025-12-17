@@ -319,21 +319,15 @@ defmodule ExRTMP.Server.ClientSession do
   end
 
   defp handle_delete_stream(stream_id, state) do
-    Logger.debug("Received delete stream commad on stream: #{stream_id}")
+    Logger.debug("Received delete stream command on stream: #{stream_id}")
 
     case state.handler_mod.handle_delete_stream(state.handler_state) do
       :close ->
         send(self(), :exit)
         {[], state}
 
-      state ->
-        state = %{
-          state
-          | stream_id: nil,
-            handler_state: state.handler_mod.handle_delete_stream(state.handler_state)
-        }
-
-        {[], state}
+      handler_state ->
+        {[], %{state | stream_id: nil, handler_state: handler_state}}
     end
   end
 
