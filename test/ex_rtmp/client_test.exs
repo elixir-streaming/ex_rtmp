@@ -59,6 +59,9 @@ defmodule ExRTMP.ClientTest do
 
       assert expected_access_units == collected_access_units
 
+      ExRTMP.Server.stop(server)
+      assert_receive {:disconnected, ^pid}, 2000
+
       Client.stop(pid)
     end
   end

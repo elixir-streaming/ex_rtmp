@@ -50,6 +50,11 @@ defmodule ExRTMP.Server.ClientSession do
     GenServer.start(__MODULE__, opts)
   end
 
+  @spec start_link(keyword()) :: GenServer.on_start()
+  def start_link(opts) do
+    GenServer.start_link(__MODULE__, opts)
+  end
+
   @doc """
   Sends video data to the client.
   """

@@ -157,7 +157,7 @@ defmodule ExRTMP.Client do
 
   @impl true
   def handle_info({:tcp_closed, _port}, state) do
-    Logger.info("RTMP connection closed")
+    send(state.receiver, {:disconnected, self()})
     {:noreply, State.reset(state)}
   end
 

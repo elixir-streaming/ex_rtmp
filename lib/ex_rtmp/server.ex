@@ -109,7 +109,7 @@ defmodule ExRTMP.Server do
 
   @impl true
   def handle_call(:stop, _from, state) do
-    Process.exit(state.listener, :normal)
+    Process.exit(state.listener, :kill)
     {:stop, :normal, :ok, state}
   end
 
@@ -136,7 +136,7 @@ defmodule ExRTMP.Server do
         Logger.debug("New client connected")
 
         {:ok, pid} =
-          ClientSession.start(
+          ClientSession.start_link(
             socket: client_socket,
             handler: state.handler,
             handler_options: state.handler_options,
