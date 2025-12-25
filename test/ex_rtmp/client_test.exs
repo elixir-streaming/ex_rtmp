@@ -78,7 +78,7 @@ defmodule ExRTMP.ClientTest do
   end
 
   defp start_server do
-    start_link_supervised!({ExRTMP.Server, [handler: ExRTMP.ServerHandler, port: 0]})
+    start_supervised!({ExRTMP.Server, [handler: ExRTMP.ServerHandler, port: 0]})
   end
 
   defp server_uri(server) do

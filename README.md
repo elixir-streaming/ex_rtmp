@@ -12,7 +12,7 @@ The package can be installed by adding `ex_rtmp` to your list of dependencies in
 ```elixir
 def deps do
   [
-    {:ex_rtmp, "~> 0.3.0"}
+    {:ex_rtmp, "~> 0.3.1"}
   ]
 end
 ```
