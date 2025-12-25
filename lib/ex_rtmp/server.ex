@@ -97,6 +97,7 @@ defmodule ExRTMP.Server do
       demux: Keyword.get(opts, :demux, true)
     }
 
+    Process.flag(:trap_exit, true)
     listener = spawn_link(fn -> accept_client_connection(state) end)
 
     {:ok, %{socket: server_socket, listener: listener}}
@@ -109,18 +110,16 @@ defmodule ExRTMP.Server do
 
   @impl true
   def handle_call(:stop, _from, state) do
-    Process.exit(state.listener, :kill)
-    {:stop, :normal, :ok, state}
+    {:stop, :shutdown, :ok, state}
   end
 
   @impl true
   def handle_info({:new_client, pid}, state) do
-    _ref = Process.monitor(pid)
+    _ref = Process.link(pid)
     {:noreply, state}
   end
 
-  @impl true
-  def handle_info({:DOWN, _ref, :process, _pid, _reason}, state) do
+  def handle_info({:EXIT, _from, _reason}, state) do
     {:noreply, state}
   end
 
@@ -136,7 +135,7 @@ defmodule ExRTMP.Server do
         Logger.debug("New client connected")
 
         {:ok, pid} =
-          ClientSession.start_link(
+          ClientSession.start(
             socket: client_socket,
             handler: state.handler,
             handler_options: state.handler_options,
