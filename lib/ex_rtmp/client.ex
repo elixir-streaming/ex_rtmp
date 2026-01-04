@@ -97,7 +97,7 @@ defmodule ExRTMP.Client do
           GenServer.name() | pid(),
           non_neg_integer(),
           non_neg_integer(),
-          ExRTMP.FLV.Tag.t()
+          AudioData.t() | VideoData.t()
         ) :: :ok
   def send_tag(client, stream_id, timestamp, tag) do
     GenServer.cast(client, {:send_tag, stream_id, timestamp, tag})
@@ -143,27 +143,18 @@ defmodule ExRTMP.Client do
 
   @impl true
   def handle_call({:play, stream_id}, from, state) do
-    play = Play.new(state.next_ts_id, state.stream_key)
+    play = Play.new(state.stream_key)
     send_messages(state.socket, [Message.command(play, stream_id)])
     state = State.set_stream_pending_action(state, stream_id, :play, from)
-    {:noreply, %{state | next_ts_id: state.next_ts_id + 1}}
+    {:noreply, state}
   end
 
+  @impl true
   def handle_call({:publish, stream_id}, from, state) do
-    fc = %ExRTMP.Message.Command.NetStream.FCPublish{
-      transaction_id: state.next_ts_id,
-      name: state.stream_key
-    }
-
-    publish = Publish.new(state.next_ts_id, state.stream_key, "live")
-
-    send_messages(state.socket, [
-      Message.command(fc, stream_id),
-      Message.command(publish, stream_id)
-    ])
-
+    publish = Publish.new(state.stream_key, "live")
+    send_messages(state.socket, Message.command(publish, stream_id))
     state = State.set_stream_pending_action(state, stream_id, :publish, from)
-    {:reply, :ok, %{state | next_ts_id: state.next_ts_id + 1}}
+    {:noreply, state}
   end
 
   @impl true

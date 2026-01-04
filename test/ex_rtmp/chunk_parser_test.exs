@@ -22,10 +22,7 @@ defmodule ExRTMP.ChunkParserTest do
     assert [
              %Message{payload: %Connect{transaction_id: 1.0}, type: 20},
              %Message{payload: %CreateStream{transaction_id: 2.0}, type: 20},
-             %Message{
-               payload: %Publish{transaction_id: 3.0, name: "test", type: :record},
-               type: 20
-             },
+             %Message{payload: %Publish{name: "test", type: :record}, type: 20},
              %Message{payload: [<<1, 2, 3>>], type: 8},
              %Message{payload: [<<4, 5>>], type: 9}
            ] = messages

@@ -11,11 +11,11 @@ defmodule ExRTMP.Message.Command.NetStream.Play do
           reset: boolean()
         }
 
-  defstruct [:transaction_id, :name, start: -2000, duration: -1, reset: true]
+  defstruct [:name, start: -2000, duration: -1, reset: true, transaction_id: 0.0]
 
-  @spec new(float(), String.t(), keyword()) :: t()
-  def new(transaction_id, name, opts \\ []) do
-    struct(%__MODULE__{transaction_id: transaction_id, name: name}, opts)
+  @spec new(String.t(), keyword()) :: t()
+  def new(name, opts \\ []) do
+    struct(%__MODULE__{name: name}, opts)
   end
 
   defimpl ExRTMP.Message.Serializer do

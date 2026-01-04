@@ -236,8 +236,8 @@ defmodule ExRTMP.Message do
             data: data
           }
 
-        ["publish", transaction_id, nil, name, type] ->
-          Publish.new(transaction_id, name, type)
+        ["publish", _txid, nil, name, type] ->
+          Publish.new(name, type)
 
         ["FCPublish", transaction_id, nil, name] ->
           FCPublish.new(transaction_id, name)
@@ -245,7 +245,7 @@ defmodule ExRTMP.Message do
         ["deleteStream", transaction_id, nil, stream_id] ->
           DeleteStream.new(transaction_id, stream_id)
 
-        ["play", transaction_id, nil, stream_name | opts] ->
+        ["play", _txid, nil, stream_name | opts] ->
           play_opts =
             case opts do
               [] -> []
@@ -254,7 +254,7 @@ defmodule ExRTMP.Message do
               [start, duration, reset] -> [start: start, duration: duration, reset: reset]
             end
 
-          Play.new(transaction_id, stream_name, play_opts)
+          Play.new(stream_name, play_opts)
 
         ["onStatus", _ts_id, nil, info] ->
           %OnStatus{info: info}
