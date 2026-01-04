@@ -11,15 +11,11 @@ defmodule ExRTMP.Message.Command.NetStream.Publish do
           type: publishing_type()
         }
 
-  defstruct [:transaction_id, :name, :type]
+  defstruct [:name, :type, transaction_id: 0.0]
 
-  @spec new(number(), String.t(), String.t()) :: t()
-  def new(transaction_id, name, type) do
-    %__MODULE__{
-      transaction_id: transaction_id,
-      name: name,
-      type: String.to_existing_atom(type)
-    }
+  @spec new(String.t(), String.t()) :: t()
+  def new(name, type) do
+    %__MODULE__{name: name, type: String.to_existing_atom(type)}
   end
 
   defimpl ExRTMP.Message.Serializer do
