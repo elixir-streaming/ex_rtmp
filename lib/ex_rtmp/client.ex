@@ -158,8 +158,11 @@ defmodule ExRTMP.Client do
 
   @impl true
   def handle_call(:play, from, %{state: :connected} = state) do
-    msg = state.stream_key |> Play.new() |> Message.command(state.stream_id)
-    send_messages(state.socket, msg)
+    state.stream_key
+    |> Play.new()
+    |> Message.command(state.stream_id)
+    |> send_message(state.socket)
+
     {:noreply, %{state | pending_action: :play, pending_peer: from}}
   end
 
@@ -170,8 +173,11 @@ defmodule ExRTMP.Client do
 
   @impl true
   def handle_call(:publish, from, %{state: :connected} = state) do
-    msg = state.stream_key |> Publish.new("live") |> Message.command(state.stream_id)
-    send_messages(state.socket, msg)
+    state.stream_key
+    |> Publish.new("live")
+    |> Message.command(state.stream_id)
+    |> send_message(state.socket)
+
     {:noreply, %{state | pending_action: :publish, pending_peer: from}}
   end
 
@@ -245,7 +251,7 @@ defmodule ExRTMP.Client do
             }
           }
 
-        send_messages(state.socket, [Message.command(connect)])
+        send_message(Message.command(connect), state.socket)
         {:noreply, %{state | pending_peer: from, pending_action: :connect}}
 
       error ->
@@ -273,7 +279,7 @@ defmodule ExRTMP.Client do
 
   defp create_stream(state) do
     ts_id = state.next_ts_id
-    send_messages(state.socket, Message.command(%CreateStream{transaction_id: ts_id}))
+    %CreateStream{transaction_id: ts_id} |> Message.command() |> send_message(state.socket)
     %{state | pending_action: :create_stream, next_ts_id: ts_id + 1}
   end
 
@@ -282,7 +288,10 @@ defmodule ExRTMP.Client do
 
     case user_event do
       %Event{type: :ping_request, data: timestamp} ->
-        send_messages(state.socket, [Message.ping_response(timestamp)])
+        timestamp
+        |> Message.ping_response()
+        |> send_message(state.socket)
+
         state
 
       _event ->
@@ -402,8 +411,7 @@ defmodule ExRTMP.Client do
 
   defp do_delete_stream(stream_id, state) do
     if stream_id do
-      msg = DeleteStream.new(stream_id) |> Message.command(stream_id)
-      send_messages(state.socket, msg)
+      DeleteStream.new(stream_id) |> Message.command(stream_id) |> send_message(state.socket)
     end
 
     :ok = :gen_tcp.close(state.socket)
@@ -418,7 +426,7 @@ defmodule ExRTMP.Client do
         timestamp: timestamp
       )
 
-    send_messages(state.socket, message)
+    send_message(message, state.socket)
   end
 
   defp handle_play_resp_code("NetStream.Play.Start"), do: :ok
@@ -426,11 +434,7 @@ defmodule ExRTMP.Client do
   defp handle_play_resp_code("NetStream.Play.StreamNotFound"), do: {:error, "Stream not found"}
   defp handle_play_resp_code("NetStream.Play.Failed"), do: {:error, "Play failed"}
 
-  defp send_messages(socket, messages) when is_list(messages) do
-    :ok = :gen_tcp.send(socket, Enum.map(messages, &Message.serialize/1))
-  end
-
-  defp send_messages(socket, message) do
+  defp send_message(message, socket) do
     :ok = :gen_tcp.send(socket, Message.serialize(message))
   end
 end

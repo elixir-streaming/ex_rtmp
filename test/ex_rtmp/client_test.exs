@@ -24,11 +24,7 @@ defmodule ExRTMP.ClientTest do
     test "connects successfully", %{server: server} do
       assert {:ok, pid} = Client.start_link(uri: server_uri(server), stream_key: @stream_key)
       assert :ok = Client.connect(pid)
-
-      assert {:ok, stream_id} = Client.create_stream(pid)
-      assert is_integer(stream_id)
-
-      assert :ok = Client.delete_stream(pid, stream_id)
+      assert :ok = Client.close(pid)
 
       assert :ok = Client.stop(pid)
       refute Process.alive?(pid)
@@ -36,19 +32,15 @@ defmodule ExRTMP.ClientTest do
 
     test "play failed", %{server: server} do
       {:ok, pid} = Client.start_link(uri: server_uri(server), stream_key: "test2")
-      :ok = Client.connect(pid)
-      {:ok, stream_id} = Client.create_stream(pid)
-
-      assert {:error, "Stream not found"} = Client.play(pid, stream_id)
+      assert {:error, :bad_state} = Client.play(pid)
     end
 
     test "stream video data", %{server: server} do
       {:ok, pid} = Client.start_link(uri: server_uri(server), stream_key: @stream_key)
       :ok = Client.connect(pid)
-      {:ok, stream_id} = Client.create_stream(pid)
-      assert :ok = Client.play(pid, stream_id)
+      assert :ok = Client.play(pid)
 
-      assert_receive {:video, ^pid, ^stream_id, {:codec, :avc, _data}}
+      assert_receive {:video, ^pid, {:codec, :avc, _data}}
       collected_access_units = collect_received_data([])
 
       expected_access_units =
@@ -68,7 +60,7 @@ defmodule ExRTMP.ClientTest do
 
   defp collect_received_data(acc) do
     receive do
-      {:video, _pid, _stream_id, {:sample, payload, dts, pts, _keyframe?}} ->
+      {:video, _pid, {:sample, payload, dts, pts, _keyframe?}} ->
         assert dts == pts
         collect_received_data([payload | acc])
     after
