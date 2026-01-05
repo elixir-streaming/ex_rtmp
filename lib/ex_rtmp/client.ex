@@ -1,6 +1,32 @@
 defmodule ExRTMP.Client do
   @moduledoc """
   RTMP Client implementation.
+
+  This module provides functionality to connect to an RTMP server, publish and play streams.
+
+  ## Media Handling
+
+  When playing a stream, the client will demux the incoming RTMP
+  streams into audio and video frames before passing them to the receiver process (the calling process by default).
+
+  The format of the data received by the receiver is:
+    * `{:video, client_pid, video_data}` - A video frame.
+    * `{:audio, client_pid, audio_data}` - An audio frame.
+
+  The `video_data` is in the following format:
+    * `{:codec, atom(), init_data}` - The codec type and initialization data.
+    * `{:sample, payload, dts, pts, keyframe?}` - A video sample, the payload depends on the codec type. In the case of `avc`,
+      the payload is a list of NAL units, for other codecs, it is the raw video frame data.
+
+  The `audio_data` is in the following format:
+    * `{:codec, atom(), init_data}` - The codec type and initialization data.
+    * `{:sample, payload, timestamp}` - An audio sample.
+
+  ## Publishing Media
+
+  When publishing a stream, the client can send FLV tags to the server using the `send_tag/3` function.
+  The tags must be either `ExFLV.Tag.AudioData` or `ExFLV.Tag.VideoData` structs.
+
   """
 
   use GenServer
@@ -8,7 +34,7 @@ defmodule ExRTMP.Client do
   require Logger
 
   alias __MODULE__.{Config, State}
-  alias ExFLV.Tag.{AudioData, VideoData}
+  alias ExFLV.Tag.{AudioData, Serializer, VideoData}
   alias ExRTMP.ChunkParser
   alias ExRTMP.Message
   alias ExRTMP.Message.Command.NetConnection.{Connect, CreateStream, Response}
@@ -16,6 +42,8 @@ defmodule ExRTMP.Client do
   alias ExRTMP.Message.UserControl.Event
 
   @default_buffer_size 2_000_000
+  @audio_msg_type 8
+  @video_msg_type 9
 
   @type start_options :: [
           {:uri, String.t()},
@@ -59,35 +87,27 @@ defmodule ExRTMP.Client do
   end
 
   @doc """
-  Creates a new stream on the RTMP server.
-  """
-  @spec create_stream(GenServer.name() | pid()) :: {:ok, Message.stream_id()} | {:error, any()}
-  def create_stream(client) do
-    GenServer.call(client, :create_stream)
-  end
-
-  @doc """
   Publishes a stream to the RTMP server.
   """
-  @spec publish(GenServer.name() | pid(), Message.stream_id()) :: :ok | {:error, any()}
-  def publish(client, stream_id) do
-    GenServer.call(client, {:publish, stream_id})
+  @spec publish(GenServer.name() | pid()) :: :ok | {:error, any()}
+  def publish(client) do
+    GenServer.call(client, :publish)
   end
 
   @doc """
   Plays a stream on the RTMP server.
   """
-  @spec play(GenServer.name() | pid(), Message.stream_id()) :: :ok | {:error, any()}
-  def play(client, stream_id) do
-    GenServer.call(client, {:play, stream_id})
+  @spec play(GenServer.name() | pid()) :: :ok | {:error, any()}
+  def play(client) do
+    GenServer.call(client, :play)
   end
 
   @doc """
-  Deletes a stream on the RTMP server.
+  Deletes a stream and close connection.
   """
-  @spec delete_stream(GenServer.name() | pid(), Message.stream_id()) :: :ok
-  def delete_stream(client, stream_id) do
-    GenServer.call(client, {:delete_stream, stream_id})
+  @spec close(GenServer.name() | pid()) :: :ok
+  def close(client) do
+    GenServer.call(client, :delete_stream)
   end
 
   @doc """
@@ -96,11 +116,10 @@ defmodule ExRTMP.Client do
   @spec send_tag(
           GenServer.name() | pid(),
           non_neg_integer(),
-          non_neg_integer(),
           AudioData.t() | VideoData.t()
         ) :: :ok
-  def send_tag(client, stream_id, timestamp, tag) do
-    GenServer.cast(client, {:send_tag, stream_id, timestamp, tag})
+  def send_tag(client, timestamp, tag) do
+    GenServer.cast(client, {:send_tag, timestamp, tag})
   end
 
   @doc """
@@ -119,7 +138,7 @@ defmodule ExRTMP.Client do
   end
 
   @impl true
-  def handle_call(:connect, from, %{uri: uri} = state) do
+  def handle_call(:connect, from, %{uri: uri, state: :init} = state) do
     tcp_options = [:binary, active: false]
 
     case :gen_tcp.connect(String.to_charlist(uri.host), uri.port, tcp_options) do
@@ -133,68 +152,67 @@ defmodule ExRTMP.Client do
   end
 
   @impl true
-  def handle_call(:create_stream, from, state) do
-    ts_id = state.next_ts_id
-    send_messages(state.socket, [Message.command(%CreateStream{transaction_id: ts_id})])
-
-    {:noreply,
-     %{state | pending_peer: from, pending_action: :create_stream, next_ts_id: ts_id + 1}}
+  def handle_call(:connect, _from, state) do
+    {:reply, {:error, :already_connected}, state}
   end
 
   @impl true
-  def handle_call({:play, stream_id}, from, state) do
-    play = Play.new(state.stream_key)
-    send_messages(state.socket, [Message.command(play, stream_id)])
-    state = State.set_stream_pending_action(state, stream_id, :play, from)
-    {:noreply, state}
+  def handle_call(:play, from, %{state: :connected} = state) do
+    msg = state.stream_key |> Play.new() |> Message.command(state.stream_id)
+    send_messages(state.socket, msg)
+    {:noreply, %{state | pending_action: :play, pending_peer: from}}
   end
 
   @impl true
-  def handle_call({:publish, stream_id}, from, state) do
-    publish = Publish.new(state.stream_key, "live")
-    send_messages(state.socket, Message.command(publish, stream_id))
-    state = State.set_stream_pending_action(state, stream_id, :publish, from)
-    {:noreply, state}
+  def handle_call(:play, _from, state) do
+    {:reply, {:error, :bad_state}, state}
   end
 
   @impl true
-  def handle_call({:delete_stream, stream_id}, _from, state) do
-    delete = DeleteStream.new(0, stream_id)
-    send_messages(state.socket, [Message.command(delete, stream_id)])
-    {:reply, :ok, do_delete_stream(stream_id, state)}
+  def handle_call(:publish, from, %{state: :connected} = state) do
+    msg = state.stream_key |> Publish.new("live") |> Message.command(state.stream_id)
+    send_messages(state.socket, msg)
+    {:noreply, %{state | pending_action: :publish, pending_peer: from}}
+  end
+
+  @impl true
+  def handle_call(:publish, _from, state) do
+    {:reply, {:error, :bad_state}, state}
+  end
+
+  @impl true
+  def handle_call(:delete_stream, _from, %{state: :init} = state) do
+    {:reply, {:error, :not_connected}, state}
+  end
+
+  def handle_call(:delete_stream, _from, state) do
+    {:reply, :ok, do_delete_stream(state.stream_id, state)}
   end
 
   @impl true
   def handle_call(:stop, _from, state) do
     if state.socket do
-      state =
-        state.streams
-        |> Map.keys()
-        |> Enum.reduce(state, &do_delete_stream/2)
-
-      :ok = :gen_tcp.close(state.socket)
-      {:stop, :normal, :ok, %{state | socket: nil}}
+      {:stop, :normal, :ok, do_delete_stream(state.stream_id, state)}
     else
       {:stop, :normal, :ok, state}
     end
   end
 
   @impl true
-  def handle_cast({:send_tag, stream_id, timestamp, tag}, state) do
-    type =
-      case tag do
-        %VideoData{} -> 9
-        %AudioData{} -> 8
-      end
+  def handle_cast({:send_tag, timestamp, %VideoData{} = tag}, %{state: :publishing} = state) do
+    do_send_tag(state, @video_msg_type, tag, timestamp)
+    {:noreply, state}
+  end
 
-    message = %Message{
-      type: type,
-      stream_id: stream_id,
-      timestamp: timestamp,
-      payload: ExFLV.Tag.Serializer.serialize(tag)
-    }
+  @impl true
+  def handle_cast({:send_tag, timestamp, %AudioData{} = tag}, %{state: :publishing} = state) do
+    do_send_tag(state, @audio_msg_type, tag, timestamp)
+    {:noreply, state}
+  end
 
-    send_messages(state.socket, message)
+  @impl true
+  def handle_cast({:send_tag, _timestamp, tag}, state) do
+    Logger.warning("Ignoring send_tag for non-publishing state or unknown tag: #{inspect(tag)}")
     {:noreply, state}
   end
 
@@ -253,6 +271,12 @@ defmodule ExRTMP.Client do
     end
   end
 
+  defp create_stream(state) do
+    ts_id = state.next_ts_id
+    send_messages(state.socket, Message.command(%CreateStream{transaction_id: ts_id}))
+    %{state | pending_action: :create_stream, next_ts_id: ts_id + 1}
+  end
+
   defp do_handle_message(%{type: 4, payload: user_event}, state) do
     Logger.debug("Received user control message: #{inspect(user_event)}")
 
@@ -295,34 +319,30 @@ defmodule ExRTMP.Client do
     command = state.pending_action
     from = state.pending_peer
 
-    state =
-      cond do
-        not Response.ok?(response) ->
-          GenServer.reply(from, {:error, response.data["description"]})
-          state
+    state = %{state | pending_peer: nil, pending_action: nil}
 
-        command == :connect ->
-          GenServer.reply(from, :ok)
-          state
+    cond do
+      not Response.ok?(response) ->
+        GenServer.reply(from, {:error, response.data["description"]})
+        state
 
-        command == :create_stream ->
-          stream_id = trunc(response.data)
-          GenServer.reply(from, {:ok, stream_id})
-          State.add_stream(state, stream_id)
-      end
+      command == :connect ->
+        state = create_stream(state)
+        %{state | state: :connected, pending_peer: from}
 
-    %{state | pending_peer: nil, pending_action: nil}
+      command == :create_stream ->
+        GenServer.reply(from, :ok)
+        %{state | stream_id: trunc(response.data)}
+    end
   end
 
-  defp do_handle_message(%{type: 20, payload: %OnStatus{info: info}} = msg, state) do
-    stream_ctx = Map.fetch!(state.streams, msg.stream_id)
-
-    case stream_ctx.pending_action do
+  defp do_handle_message(%{type: 20, payload: %OnStatus{info: info}}, state) do
+    case state.pending_action do
       :play ->
-        handle_play_response(info, stream_ctx, state)
+        handle_play_response(info, state)
 
       :publish ->
-        handle_publish_response(info, stream_ctx, state)
+        handle_publish_response(info, state)
 
       _other ->
         state
@@ -335,55 +355,70 @@ defmodule ExRTMP.Client do
   end
 
   defp do_handle_media_message(state, msg, media_type) do
-    case State.handle_media_message(state, msg) do
-      {nil, state} ->
-        state
+    {data, state} = State.handle_media_message(state, msg)
 
-      {data, state} when is_list(data) ->
-        Enum.each(data, &send(state.receiver, {media_type, self(), msg.stream_id, &1}))
-        state
-
-      {data, state} ->
-        send(state.receiver, {media_type, self(), msg.stream_id, data})
-        state
+    cond do
+      is_nil(data) -> :ok
+      is_list(data) -> Enum.each(data, &send(state.receiver, {media_type, self(), &1}))
+      true -> send(state.receiver, {media_type, self(), data})
     end
+
+    state
   end
 
-  defp handle_play_response(info, stream_ctx, state) do
+  defp handle_play_response(info, state) do
     case handle_play_resp_code(info["code"]) do
       :ignore ->
         state
 
       :ok ->
-        GenServer.reply(stream_ctx.pending_peer, :ok)
-        stream_ctx = %{stream_ctx | pending_peer: nil, pending_action: nil, state: :playing}
-        %{state | streams: Map.put(state.streams, stream_ctx.id, stream_ctx)}
+        GenServer.reply(state.pending_peer, :ok)
+
+        %{
+          state
+          | pending_peer: nil,
+            pending_action: nil,
+            state: :playing,
+            media_processor: __MODULE__.MediaProcessor.new()
+        }
 
       {:error, reason} ->
-        GenServer.reply(stream_ctx.pending_peer, {:error, Map.get(info, "description", reason)})
-        stream_ctx = %{stream_ctx | pending_peer: nil, pending_action: nil}
-        %{state | streams: Map.put(state.streams, stream_ctx.id, stream_ctx)}
+        GenServer.reply(state.pending_peer, {:error, Map.get(info, "description", reason)})
+        %{state | pending_peer: nil, pending_action: nil}
     end
   end
 
-  defp handle_publish_response(info, stream_ctx, state) do
+  defp handle_publish_response(info, state) do
     case info["code"] do
       "NetStream.Publish.Start" ->
-        GenServer.reply(stream_ctx.pending_peer, :ok)
-        stream_ctx = %{stream_ctx | pending_peer: nil, pending_action: nil, state: :publishing}
-        %{state | streams: Map.put(state.streams, stream_ctx.id, stream_ctx)}
+        GenServer.reply(state.pending_peer, :ok)
+        %{state | pending_peer: nil, pending_action: nil, state: :publishing}
 
       other ->
-        GenServer.reply(stream_ctx.pending_peer, {:error, Map.get(info, "description", other)})
-        stream_ctx = %{stream_ctx | pending_peer: nil, pending_action: nil}
-        %{state | streams: Map.put(state.streams, stream_ctx.id, stream_ctx)}
+        GenServer.reply(state.pending_peer, {:error, Map.get(info, "description", other)})
+        %{state | pending_peer: nil, pending_action: nil}
     end
   end
 
   defp do_delete_stream(stream_id, state) do
-    delete = DeleteStream.new(0, stream_id)
-    send_messages(state.socket, [Message.command(delete, stream_id)])
-    State.delete_stream(state, stream_id)
+    if stream_id do
+      msg = DeleteStream.new(stream_id) |> Message.command(stream_id)
+      send_messages(state.socket, msg)
+    end
+
+    :ok = :gen_tcp.close(state.socket)
+    State.reset(state)
+  end
+
+  defp do_send_tag(state, type, tag, timestamp) do
+    message =
+      Message.new(Serializer.serialize(tag),
+        type: type,
+        stream_id: state.stream_id,
+        timestamp: timestamp
+      )
+
+    send_messages(state.socket, message)
   end
 
   defp handle_play_resp_code("NetStream.Play.Start"), do: :ok
