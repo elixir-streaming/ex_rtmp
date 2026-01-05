@@ -12,8 +12,7 @@ defmodule ExRTMP.ServerHandler do
   @dcr <<1, 66, 192, 13, 255, 225, 0, 25, 103, 66, 192, 13, 171, 32, 40, 51, 243, 224, 34, 0, 0,
          3, 0, 2, 0, 0, 3, 0, 97, 30, 40, 84, 144, 1, 0, 4, 104, 206, 60, 128>>
 
-  @impl true
-  def init(opts), do: opts
+  def dcr, do: @dcr
 
   @impl true
   def handle_play(%{name: "test"}, state) do
@@ -25,6 +24,12 @@ defmodule ExRTMP.ServerHandler do
   @impl true
   def handle_play(_play, _state) do
     {:error, "Stream not found"}
+  end
+
+  @impl true
+  def handle_video_data(_, sample, state) do
+    send(state[:pid], {:video, self(), sample})
+    state
   end
 
   defp send_video(pid) do

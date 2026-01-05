@@ -2,12 +2,15 @@ defmodule ExRTMP.Client.State do
   @moduledoc false
 
   alias ExRTMP.ChunkParser
-  alias ExRTMP.Client.StreamContext
+  alias ExRTMP.Client.MediaProcessor
   alias ExRTMP.Message
+
+  @compile {:inline, handle_media_message: 2}
 
   @default_window_ack_size 2_500_000
 
-  @type command :: :connect | :create_stream | :play
+  @type command :: :connect | :create_stream | :play | :publish
+  @type state :: :init | :connected | :playing | :publishing
 
   @type t :: %__MODULE__{
           uri: URI.t(),
@@ -19,7 +22,9 @@ defmodule ExRTMP.Client.State do
           pending_action: command() | nil,
           next_ts_id: non_neg_integer(),
           window_ack_size: non_neg_integer(),
-          streams: %{Message.stream_id() => StreamContext.t()}
+          stream_id: Message.stream_id() | nil,
+          state: state(),
+          media_processor: MediaProcessor.t() | nil
         }
 
   @enforce_keys [:uri, :stream_key]
@@ -29,56 +34,25 @@ defmodule ExRTMP.Client.State do
                 :pending_peer,
                 :pending_action,
                 :receiver,
+                :stream_id,
+                :media_processor,
+                state: :init,
                 chunk_parser: ChunkParser.new(),
                 next_ts_id: 2,
-                window_ack_size: @default_window_ack_size,
-                streams: %{}
+                window_ack_size: @default_window_ack_size
               ]
-
-  @spec add_stream(t(), ExRTMP.Message.stream_id()) :: t()
-  def add_stream(state, stream_id) do
-    stream = %StreamContext{id: stream_id}
-    %{state | streams: Map.put(state.streams, stream_id, stream)}
-  end
-
-  @spec set_stream_pending_action(t(), Message.stream_id(), command(), GenServer.from()) :: t()
-  def set_stream_pending_action(state, stream_id, action, from) do
-    streams =
-      Map.update!(state.streams, stream_id, fn stream ->
-        %{stream | pending_action: action, pending_peer: from}
-      end)
-
-    %{state | streams: streams}
-  end
-
-  @spec clear_stream_pending_action(t(), Message.stream_id()) :: t()
-  def clear_stream_pending_action(state, stream_id) do
-    streams =
-      Map.update!(state.streams, stream_id, fn stream ->
-        %{stream | pending_action: nil, pending_peer: nil}
-      end)
-
-    %{state | streams: streams}
-  end
-
-  @spec delete_stream(t(), Message.stream_id()) :: t()
-  def delete_stream(state, stream_id) do
-    %{state | streams: Map.delete(state.streams, stream_id)}
-  end
 
   @doc false
   @spec handle_media_message(t(), ExRTMP.Message.t()) ::
           {ExRTMP.Client.MediaProcessor.video_return(), t()}
-  def handle_media_message(state, message) do
-    stream_ctx = state.streams[message.stream_id]
+  def handle_media_message(state, %{type: 8} = message) do
+    {data, processor} = MediaProcessor.push_audio(message, state.media_processor)
+    {data, %{state | media_processor: processor}}
+  end
 
-    {result, stream_ctx} =
-      if message.type == 8,
-        do: StreamContext.handle_audio_data(stream_ctx, message),
-        else: StreamContext.handle_video_data(stream_ctx, message)
-
-    state = %{state | streams: Map.put(state.streams, stream_ctx.id, stream_ctx)}
-    {result, state}
+  def handle_media_message(state, %{type: 9} = message) do
+    {data, processor} = MediaProcessor.push_video(message, state.media_processor)
+    {data, %{state | media_processor: processor}}
   end
 
   @doc false

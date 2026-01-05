@@ -242,8 +242,8 @@ defmodule ExRTMP.Message do
         ["FCPublish", transaction_id, nil, name] ->
           FCPublish.new(transaction_id, name)
 
-        ["deleteStream", transaction_id, nil, stream_id] ->
-          DeleteStream.new(transaction_id, stream_id)
+        ["deleteStream", _txid, nil, stream_id] ->
+          DeleteStream.new(stream_id)
 
         ["play", _txid, nil, stream_name | opts] ->
           play_opts =

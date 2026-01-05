@@ -6,11 +6,11 @@ defmodule ExRTMP.Message.Command.NetStream.DeleteStream do
           stream_id: number()
         }
 
-  defstruct [:transaction_id, :stream_id]
+  defstruct [:stream_id, transaction_id: 0.0]
 
-  @spec new(number(), number()) :: t()
-  def new(transaction_id, stream_id) do
-    %__MODULE__{transaction_id: transaction_id, stream_id: stream_id}
+  @spec new(number()) :: t()
+  def new(stream_id) do
+    %__MODULE__{stream_id: stream_id}
   end
 
   defimpl ExRTMP.Message.Serializer do
