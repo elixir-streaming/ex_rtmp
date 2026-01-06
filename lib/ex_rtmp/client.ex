@@ -75,6 +75,7 @@ defmodule ExRTMP.Client do
   """
   @spec start(start_options()) :: GenServer.on_start()
   def start(opts) do
+    opts = Keyword.put_new(opts, :receiver, self())
     GenServer.start(__MODULE__, opts, name: opts[:name])
   end
 
