@@ -8,7 +8,7 @@ defmodule ExRTMP.ClientTest do
   @stream_key "test"
 
   setup do
-    %{server: start_server()}
+    %{server: start_server(nil)}
   end
 
   describe "start_link/1" do
@@ -45,26 +45,34 @@ defmodule ExRTMP.ClientTest do
       assert {:error, :bad_state} = Client.publish(pid)
     end
 
-    test "stream video data", %{server: server} do
-      {:ok, pid} = Client.start_link(uri: server_uri(server), stream_key: @stream_key)
-      :ok = Client.connect(pid)
-      assert :ok = Client.play(pid)
+    for {fixture, codec} <- [
+          {"test/fixtures/video.h264", :h264},
+          {"test/fixtures/video.hevc", :hevc}
+        ] do
+      test "stream video data: #{codec}" do
+        server = start_server(unquote(fixture))
 
-      assert_receive {:video, ^pid, {:codec, :avc, _data}}
-      collected_access_units = collect_received_data([])
+        {:ok, pid} = Client.start_link(uri: server_uri(server), stream_key: @stream_key)
+        :ok = Client.connect(pid)
+        assert :ok = Client.play(pid)
 
-      expected_access_units =
-        "test/fixtures/video.h264"
-        |> File.stream!(1024)
-        |> ExRTMP.ServerHandler.parse(:h264)
-        |> Enum.to_list()
+        assert_receive {:video, ^pid, {:codec, _codec, _data}}
 
-      assert expected_access_units == collected_access_units
+        collected_access_units = collect_received_data([])
 
-      ExRTMP.Server.stop(server)
-      assert_receive {:disconnected, ^pid}, 2000
+        expected_access_units =
+          unquote(fixture)
+          |> File.stream!(1024)
+          |> ExRTMP.ServerHandler.parse(unquote(codec))
+          |> Enum.to_list()
 
-      Client.stop(pid)
+        assert expected_access_units == collected_access_units
+
+        ExRTMP.Server.stop(server)
+        assert_receive {:disconnected, ^pid}, 2000
+
+        Client.stop(pid)
+      end
     end
 
     test "publish video data", %{server: server} do
@@ -116,10 +124,15 @@ defmodule ExRTMP.ClientTest do
     end
   end
 
-  defp start_server do
-    start_supervised!(
-      {ExRTMP.Server, [handler: ExRTMP.ServerHandler, handler_options: [pid: self()], port: 0]}
-    )
+  defp start_server(fixture) do
+    {:ok, pid} =
+      ExRTMP.Server.start(
+        handler: ExRTMP.ServerHandler,
+        handler_options: [pid: self(), fixture: fixture],
+        port: 0
+      )
+
+    pid
   end
 
   defp server_uri(server) do

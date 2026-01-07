@@ -145,7 +145,7 @@ defmodule ExRTMP.Client.MediaProcessor do
     nalu_prefix_size + 1
   end
 
-  defp nalu_prefix_size(codec, <<_::binary-size(38), nalu_prefix_size::2, _::binary>>)
+  defp nalu_prefix_size(codec, <<_::38, nalu_prefix_size::2, _::binary>>)
        when codec == :avc or codec == :avc1 do
     nalu_prefix_size + 1
   end
