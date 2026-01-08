@@ -1,4 +1,4 @@
-Mix.install([:ex_mp4, :media_codecs, {:ex_rtmp, path: "."}])
+Mix.install([:ex_mp4, :media_codecs, :ex_rtmp])
 
 defmodule Publisher do
   use GenServer
