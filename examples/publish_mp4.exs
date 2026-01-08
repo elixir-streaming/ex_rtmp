@@ -91,7 +91,7 @@ defmodule Publisher do
 
   defp init_tag(%{media: :h264} = track) do
     <<_::binary-size(8), dcr::binary>> = ExMP4.Box.serialize(track.priv_data)
-    VideoData.AVC.new(dcr, :sequence_header, 0) |> VideoData.new(:avc, :keyframe)
+    VideoData.AVC.new(dcr, :sequence_header, 0) |> VideoData.new(:h264, :keyframe)
   end
 
   defp init_tag(%{media: :h265} = track) do
@@ -116,7 +116,7 @@ defmodule Publisher do
   defp video_tag(:h264, sample, ct) do
     sample.payload
     |> VideoData.AVC.new(:nalu, ct)
-    |> VideoData.new(:avc, if(sample.sync?, do: :keyframe, else: :interframe))
+    |> VideoData.new(:h264, if(sample.sync?, do: :keyframe, else: :interframe))
   end
 
   defp video_tag(:h265, sample, ct) do

@@ -18,11 +18,11 @@ defmodule ExRTMP.Message.Command.NetStream.OnStatus do
     %__MODULE__{info: info}
   end
 
-  @spec publish_ok() :: t()
-  def publish_ok(), do: new("NetStream.Publish.Start")
+  @spec publish_ok :: t()
+  def publish_ok, do: new("NetStream.Publish.Start")
 
-  @spec publish_bad_stream() :: t()
-  def publish_bad_stream() do
+  @spec publish_bad_stream :: t()
+  def publish_bad_stream do
     new("NetStream.Publish.BadStream", :error, "Unknown stream")
   end
 
@@ -31,11 +31,11 @@ defmodule ExRTMP.Message.Command.NetStream.OnStatus do
     new("NetStream.Publish.Failed", :error, reason)
   end
 
-  @spec play_ok() :: t()
-  def play_ok(), do: new("NetStream.Play.Start")
+  @spec play_ok :: t()
+  def play_ok, do: new("NetStream.Play.Start")
 
-  @spec play_bad_stream() :: t()
-  def play_bad_stream() do
+  @spec play_bad_stream :: t()
+  def play_bad_stream do
     new("NetStream.Play.BadStream", :error, "Unknown stream")
   end
 

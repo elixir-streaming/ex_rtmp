@@ -3,13 +3,13 @@ defmodule ExRTMP.ServerHandler do
 
   use ExRTMP.Server.Handler
 
-  alias MediaCodecs.H264
   alias ExFLV.Tag.{AudioData, ExVideoData, Serializer, VideoData, VideoData.AVC}
   alias ExRTMP.Server.ClientSession
-  alias MediaCodecs.H264.NaluSplitter
+  alias MediaCodecs.H264
   alias MediaCodecs.H264.AccessUnitSplitter
-  alias MediaCodecs.H265.NaluSplitter, as: HevcNaluSplitter
+  alias MediaCodecs.H264.NaluSplitter
   alias MediaCodecs.H265.AccessUnitSplitter, as: HevcAccessUnitSplitter
+  alias MediaCodecs.H265.NaluSplitter, as: HevcNaluSplitter
 
   @dcr <<1, 66, 192, 13, 255, 225, 0, 25, 103, 66, 192, 13, 171, 32, 40, 51, 243, 224, 34, 0, 0,
          3, 0, 2, 0, 0, 3, 0, 97, 30, 40, 84, 144, 1, 0, 4, 104, 206, 60, 128>>
@@ -113,14 +113,14 @@ defmodule ExRTMP.ServerHandler do
   defp h264_dcr_tag(dcr) do
     dcr
     |> AVC.new(:sequence_header, 0)
-    |> VideoData.new(:avc, :keyframe)
+    |> VideoData.new(:h264, :keyframe)
   end
 
   defp hevc_dcr_tag(dcr) do
     %ExVideoData{
       frame_type: :keyframe,
       packet_type: :sequence_start,
-      fourcc: :hvc1,
+      codec_id: :h265,
       data: dcr
     }
   end
@@ -130,7 +130,7 @@ defmodule ExRTMP.ServerHandler do
     |> Enum.map(&[<<byte_size(&1)::32>>, &1])
     |> AVC.new(:nalu, 0)
     |> VideoData.new(
-      :avc,
+      :h264,
       if(Enum.any?(access_unit, &H264.NALU.keyframe?/1), do: :keyframe, else: :interframe)
     )
   end
@@ -142,15 +142,14 @@ defmodule ExRTMP.ServerHandler do
     %ExVideoData{
       frame_type: if(keyframe?, do: :keyframe, else: :interframe),
       packet_type: :coded_frames,
-      fourcc: :hvc1,
-      composition_time_offset: 0,
+      codec_id: :h265,
       data: payload
     }
   end
 
   defp create_tag(:pcma, data) do
     %AudioData{
-      sound_format: :g711_alaw,
+      sound_format: :pcma,
       sound_size: 0,
       sound_rate: 1,
       sound_type: :mono,

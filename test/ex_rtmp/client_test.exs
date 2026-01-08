@@ -62,15 +62,15 @@ defmodule ExRTMP.ClientTest do
         case unquote(codec) do
           :h264 ->
             assert media_type == :video
-            assert received_codec == :avc
+            assert received_codec == :h264
 
           :hevc ->
             assert media_type == :video
-            assert received_codec == :hvc1
+            assert received_codec == :h265
 
           :pcma ->
             assert media_type == :audio
-            assert received_codec == :g711_alaw
+            assert received_codec == :pcma
         end
 
         collected_access_units = collect_received_data([])
@@ -104,7 +104,7 @@ defmodule ExRTMP.ClientTest do
       init_tag =
         ExRTMP.ServerHandler.dcr()
         |> VideoData.AVC.new(:sequence_header, 0)
-        |> VideoData.new(:avc, :keyframe)
+        |> VideoData.new(:h264, :keyframe)
 
       Client.send_tag(pid, 0, init_tag)
 
@@ -114,7 +114,7 @@ defmodule ExRTMP.ClientTest do
         access_unit
         |> Enum.map(&[<<byte_size(&1)::32>>, &1])
         |> VideoData.AVC.new(:nalu, 0)
-        |> VideoData.new(:avc, if(keyframe?, do: :keyframe, else: :interframe))
+        |> VideoData.new(:h264, if(keyframe?, do: :keyframe, else: :interframe))
         |> then(&Client.send_tag(pid, 0, &1))
       end)
 

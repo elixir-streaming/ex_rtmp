@@ -10,8 +10,8 @@ defmodule ExRTMP.Client.MediaProcessor do
   @type codec ::
           AudioData.source_format()
           | VideoData.codec_id()
-          | ExVideoData.fourcc()
-          | ExAudioData.fourcc()
+          | ExVideoData.codec_id()
+          | ExAudioData.codec_id()
 
   @type track :: {:codec, codec(), binary()}
   @type video_sample ::
@@ -31,8 +31,8 @@ defmodule ExRTMP.Client.MediaProcessor do
 
   defstruct [:nalu_prefix_size, video?: false, audio?: false]
 
-  @spec new() :: t()
-  def new(), do: %__MODULE__{}
+  @spec new :: t()
+  def new, do: %__MODULE__{}
 
   @spec push_video(Message.t(), t()) :: {video_return(), t()}
   def push_video(message, processor) do
@@ -56,7 +56,7 @@ defmodule ExRTMP.Client.MediaProcessor do
   defp parse_audio_tag(<<9::4, _::bitstring>> = data), do: ExAudioData.parse!(data)
   defp parse_audio_tag(data), do: AudioData.parse!(data)
 
-  defp handle_video_tag(%VideoData{codec_id: :avc} = tag, timestamp, processor) do
+  defp handle_video_tag(%VideoData{codec_id: :h264} = tag, timestamp, processor) do
     packet_type = tag.data.packet_type
 
     cond do
@@ -67,11 +67,11 @@ defmodule ExRTMP.Client.MediaProcessor do
       packet_type == :sequence_header ->
         processor = %{
           processor
-          | nalu_prefix_size: nalu_prefix_size(:avc, tag.data.data),
+          | nalu_prefix_size: nalu_prefix_size(:h264, tag.data.data),
             video?: true
         }
 
-        {{:codec, :avc, tag.data.data}, processor}
+        {{:codec, :h264, tag.data.data}, processor}
 
       packet_type == :end_of_sequence ->
         {nil, processor}
@@ -101,11 +101,11 @@ defmodule ExRTMP.Client.MediaProcessor do
       packet_type == :sequence_start ->
         processor = %{
           processor
-          | nalu_prefix_size: nalu_prefix_size(tag.fourcc, tag.data),
+          | nalu_prefix_size: nalu_prefix_size(tag.codec_id, tag.data),
             video?: true
         }
 
-        {{:codec, tag.fourcc, tag.data}, processor}
+        {{:codec, tag.codec_id, tag.data}, processor}
 
       packet_type in [:sequence_end, :metadata] ->
         {nil, processor}
@@ -149,7 +149,7 @@ defmodule ExRTMP.Client.MediaProcessor do
         {{:sample, tag.data, timestamp}, processor}
 
       tag.packet_type == :sequence_start ->
-        {{:codec, tag.fourcc, tag.data}, %{processor | audio?: true}}
+        {{:codec, tag.codec_id, tag.data}, %{processor | audio?: true}}
 
       true ->
         {nil, processor}
@@ -165,12 +165,12 @@ defmodule ExRTMP.Client.MediaProcessor do
     {{:sample, tag.data, timestamp}, processor}
   end
 
-  defp nalu_prefix_size(:hvc1, <<_::binary-size(21), _::6, nalu_prefix_size::2, _::binary>>) do
+  defp nalu_prefix_size(:h265, <<_::binary-size(21), _::6, nalu_prefix_size::2, _::binary>>) do
     nalu_prefix_size + 1
   end
 
   defp nalu_prefix_size(codec, <<_::38, nalu_prefix_size::2, _::binary>>)
-       when codec == :avc or codec == :avc1 do
+       when codec == :h264 or codec == :h265 do
     nalu_prefix_size + 1
   end
 

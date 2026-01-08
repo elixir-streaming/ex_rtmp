@@ -32,9 +32,8 @@ defmodule ExRTMP.Chunk do
   @spec parse_header(binary()) :: {:ok, t(), binary()} | :more
   def parse_header(data) do
     with {:ok, chunk, rest} <- parse_stream_id(data),
-         {:ok, chunk, rest} <- parse_message_header(chunk, rest),
-         {:ok, chunk, rest} <- parse_extended_timestamp(chunk, rest) do
-      {:ok, chunk, rest}
+         {:ok, chunk, rest} <- parse_message_header(chunk, rest) do
+      parse_extended_timestamp(chunk, rest)
     end
   end
 

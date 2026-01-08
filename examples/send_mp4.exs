@@ -30,7 +30,7 @@ defmodule Publisher do
        video_reducer: video_reducer,
        audio_track: audio_track,
        audio_reducer: audio_reducer,
-       stream_id: opts[:stream_id],
+       stream_id: opts[:stream_id]
      }, {:continue, :send_init_data}}
   end
 
@@ -55,7 +55,7 @@ defmodule Publisher do
 
     dcr
     |> AVCVideoPacket.new(:sequence_header, 0)
-    |> VideoData.new(:avc, :keyframe)
+    |> VideoData.new(:h264, :keyframe)
     |> ExFLV.Tag.Serializer.serialize()
     |> then(&ClientSession.send_video_data(state.rtmp_sender, state.stream_id, 0, &1))
 
@@ -83,7 +83,7 @@ defmodule Publisher do
         data =
           sample.payload
           |> AVCVideoPacket.new(:nalu, sample.pts - sample.dts)
-          |> VideoData.new(:avc, frame_type)
+          |> VideoData.new(:h264, frame_type)
           |> ExFLV.Tag.Serializer.serialize()
 
         ClientSession.send_video_data(state.rtmp_sender, state.stream_id, timestamp, data)

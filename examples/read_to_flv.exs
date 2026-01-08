@@ -39,11 +39,11 @@ defmodule StreamWriter do
   end
 
   @impl true
-  def handle_info({:video, pid, _stream_id, {:codec, :avc, dcr}}, %{client: pid} = state) do
+  def handle_info({:video, pid, _stream_id, {:codec, :h264, dcr}}, %{client: pid} = state) do
     payload =
       dcr
       |> Tag.AVCVideoPacket.new(:sequence_header, 0)
-      |> Tag.VideoData.new(:avc, :keyframe)
+      |> Tag.VideoData.new(:h264, :keyframe)
 
     tag = Tag.serialize(%Tag{type: :video, data: payload, timestamp: 0})
     IO.binwrite(state.writer, [tag, <<IO.iodata_length(tag)::32>>])
@@ -73,7 +73,7 @@ defmodule StreamWriter do
       payload
       |> Enum.map(&<<byte_size(&1)::32, &1::binary>>)
       |> Tag.AVCVideoPacket.new(:nalu, pts - dts)
-      |> Tag.VideoData.new(:avc, if(sync?, do: :keyframe, else: :interframe))
+      |> Tag.VideoData.new(:h264, if(sync?, do: :keyframe, else: :interframe))
 
     tag = Tag.serialize(%Tag{type: :video, data: payload, timestamp: dts})
     IO.binwrite(state.writer, [tag, <<IO.iodata_length(tag)::32>>])

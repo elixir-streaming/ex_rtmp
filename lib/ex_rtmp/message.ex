@@ -9,7 +9,7 @@ defmodule ExRTMP.Message do
   alias __MODULE__.Command.NetStream.{DeleteStream, FCPublish, OnStatus, Play, Publish}
   alias __MODULE__.Metadata
   alias __MODULE__.UserControl.Event
-  alias ExRTMP.Chunk
+  alias ExRTMP.{Chunk, Message}
 
   @type stream_id :: non_neg_integer()
 
@@ -149,7 +149,7 @@ defmodule ExRTMP.Message do
 
     payload =
       if is_struct(message.payload),
-        do: ExRTMP.Message.Serializer.serialize(message.payload),
+        do: Message.Serializer.serialize(message.payload),
         else: message.payload
 
     payload = IO.iodata_to_binary(payload)
@@ -221,51 +221,57 @@ defmodule ExRTMP.Message do
   @doc false
   defp parse_payload(%__MODULE__{type: 20, payload: payload} = msg) do
     payload =
-      case ExRTMP.AMF0.parse(IO.iodata_to_binary(payload)) do
-        ["connect", transaction_id, properties | _rest] ->
-          %Connect{transaction_id: transaction_id, properties: properties}
-
-        ["createStream", transaction_id | _rest] ->
-          %CreateStream{transaction_id: transaction_id}
-
-        [result, transaction_id, command_object, data] when result in ["_result", "_error"] ->
-          %Response{
-            result: result,
-            transaction_id: trunc(transaction_id),
-            command_object: command_object,
-            data: data
-          }
-
-        ["publish", _txid, nil, name, type] ->
-          Publish.new(name, type)
-
-        ["FCPublish", transaction_id, nil, name] ->
-          FCPublish.new(transaction_id, name)
-
-        ["deleteStream", _txid, nil, stream_id] ->
-          DeleteStream.new(stream_id)
-
-        ["play", _txid, nil, stream_name | opts] ->
-          play_opts =
-            case opts do
-              [] -> []
-              [start] -> [start: start]
-              [start, duration] -> [start: start, duration: duration]
-              [start, duration, reset] -> [start: start, duration: duration, reset: reset]
-            end
-
-          Play.new(stream_name, play_opts)
-
-        ["onStatus", _ts_id, nil, info] ->
-          %OnStatus{info: info}
-
-        other ->
-          Logger.warning("Unknown command: #{inspect(List.first(other))}")
-          payload
-      end
+      payload
+      |> IO.iodata_to_binary()
+      |> ExRTMP.AMF0.parse()
+      |> handle_message_payload()
 
     %{msg | payload: payload}
   end
 
   defp parse_payload(msg), do: msg
+
+  defp handle_message_payload(["connect", transaction_id, properties | _rest]) do
+    %Connect{transaction_id: transaction_id, properties: properties}
+  end
+
+  defp handle_message_payload(["createStream", transaction_id | _rest]) do
+    %CreateStream{transaction_id: transaction_id}
+  end
+
+  defp handle_message_payload([result, transaction_id, command_object, data])
+       when result in ["_result", "_error"] do
+    %Response{
+      result: result,
+      transaction_id: trunc(transaction_id),
+      command_object: command_object,
+      data: data
+    }
+  end
+
+  defp handle_message_payload(["publish", _txid, nil, name, type]), do: Publish.new(name, type)
+  defp handle_message_payload(["onStatus", _txid, nil, info]), do: %OnStatus{info: info}
+
+  defp handle_message_payload(["play", _txid, nil, name | opts]) do
+    play_opts =
+      case opts do
+        [] -> []
+        [start] -> [start: start]
+        [start, duration] -> [start: start, duration: duration]
+        [start, duration, reset] -> [start: start, duration: duration, reset: reset]
+      end
+
+    Play.new(name, play_opts)
+  end
+
+  defp handle_message_payload(["deleteStream", _txid, nil, stream_id]),
+    do: DeleteStream.new(stream_id)
+
+  defp handle_message_payload(["FCPublish", transaction_id, nil, name]),
+    do: FCPublish.new(transaction_id, name)
+
+  defp handle_message_payload(other) do
+    Logger.warning("Unknown command: #{inspect(other)}")
+    other
+  end
 end
