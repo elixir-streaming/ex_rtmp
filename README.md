@@ -12,10 +12,13 @@ The package can be installed by adding `ex_rtmp` to your list of dependencies in
 ```elixir
 def deps do
   [
-    {:ex_rtmp, "~> 0.3.1"}
+    {:ex_rtmp, "~> 0.4.0"}
   ]
 end
 ```
+
+## Enhanced RTMP
+Enhanced RTMP is supported to some extent, there's a lack of support for `Multitrack` and `ModEx` tags.
 
 ## Usage
 See the [examples](./examples) folder.

@@ -1,7 +1,7 @@
 defmodule ExRTMP.MixProject do
   use Mix.Project
 
-  @version "0.3.1"
+  @version "0.4.0"
   @github_url "https://github.com/elixir-streaming/ex_rtmp"
 
   def project do
