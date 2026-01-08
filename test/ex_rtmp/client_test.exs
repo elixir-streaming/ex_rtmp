@@ -47,7 +47,8 @@ defmodule ExRTMP.ClientTest do
 
     for {fixture, codec} <- [
           {"test/fixtures/video.h264", :h264},
-          {"test/fixtures/video.hevc", :hevc}
+          {"test/fixtures/video.hevc", :hevc},
+          {"test/fixtures/audio.pcma", :pcma}
         ] do
       test "stream video data: #{codec}" do
         server = start_server(unquote(fixture))
@@ -56,16 +57,31 @@ defmodule ExRTMP.ClientTest do
         :ok = Client.connect(pid)
         assert :ok = Client.play(pid)
 
-        assert_receive {:video, ^pid, {:codec, _codec, _data}}
+        assert_receive {media_type, ^pid, {:codec, received_codec, _data}}
+
+        case unquote(codec) do
+          :h264 ->
+            assert media_type == :video
+            assert received_codec == :avc
+
+          :hevc ->
+            assert media_type == :video
+            assert received_codec == :hvc1
+
+          :pcma ->
+            assert media_type == :audio
+            assert received_codec == :g711_alaw
+        end
 
         collected_access_units = collect_received_data([])
 
         expected_access_units =
           unquote(fixture)
-          |> File.stream!(1024)
-          |> ExRTMP.ServerHandler.parse(unquote(codec))
+          |> ExRTMP.ServerHandler.parse()
+          |> elem(1)
           |> Enum.to_list()
 
+        assert length(expected_access_units) == length(collected_access_units)
         assert expected_access_units == collected_access_units
 
         ExRTMP.Server.stop(server)
@@ -81,9 +97,8 @@ defmodule ExRTMP.ClientTest do
       assert :ok = Client.publish(pid)
 
       expected_access_units =
-        "test/fixtures/video.h264"
-        |> File.stream!(1024)
-        |> ExRTMP.ServerHandler.parse(:h264)
+        ExRTMP.ServerHandler.parse("test/fixtures/video.h264")
+        |> elem(1)
         |> Enum.to_list()
 
       init_tag =
@@ -117,6 +132,9 @@ defmodule ExRTMP.ClientTest do
     receive do
       {:video, _pid, {:sample, payload, dts, pts, _keyframe?}} ->
         assert dts == pts
+        collect_received_data([payload | acc])
+
+      {:audio, _pid, {:sample, payload, _pts}} ->
         collect_received_data([payload | acc])
     after
       1000 ->

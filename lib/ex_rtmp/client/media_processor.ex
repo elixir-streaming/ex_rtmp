@@ -2,12 +2,16 @@ defmodule ExRTMP.Client.MediaProcessor do
   @moduledoc false
 
   require Logger
-  alias ExFLV.Tag.{AudioData, ExVideoData, VideoData}
+  alias ExFLV.Tag.{AudioData, ExAudioData, ExVideoData, VideoData}
   alias ExRTMP.Message
 
-  @compile {:inline, maybe_get_nalus: 2, parse_video_tag: 1}
+  @compile {:inline, maybe_get_nalus: 2, parse_video_tag: 1, parse_audio_tag: 1}
 
-  @type codec :: :avc | :hvc1 | :aac | :avc1 | :vp08 | :vp09 | :av01 | atom()
+  @type codec ::
+          AudioData.source_format()
+          | VideoData.codec_id()
+          | ExVideoData.fourcc()
+          | ExAudioData.fourcc()
 
   @type track :: {:codec, codec(), binary()}
   @type video_sample ::
@@ -38,16 +42,19 @@ defmodule ExRTMP.Client.MediaProcessor do
     |> handle_video_tag(message.timestamp, processor)
   end
 
-  defp parse_video_tag(<<0::1, _::bitstring>> = data), do: VideoData.parse!(data)
-  defp parse_video_tag(data), do: ExVideoData.parse!(data)
-
   @spec push_audio(Message.t(), t()) :: {audio_return(), t()}
   def push_audio(message, processor) do
     message.payload
     |> IO.iodata_to_binary()
-    |> AudioData.parse!()
+    |> parse_audio_tag()
     |> handle_audio_tag(message.timestamp, processor)
   end
+
+  defp parse_video_tag(<<0::1, _::bitstring>> = data), do: VideoData.parse!(data)
+  defp parse_video_tag(data), do: ExVideoData.parse!(data)
+
+  defp parse_audio_tag(<<9::4, _::bitstring>> = data), do: ExAudioData.parse!(data)
+  defp parse_audio_tag(data), do: AudioData.parse!(data)
 
   defp handle_video_tag(%VideoData{codec_id: :avc} = tag, timestamp, processor) do
     packet_type = tag.data.packet_type
@@ -129,6 +136,23 @@ defmodule ExRTMP.Client.MediaProcessor do
 
       :raw ->
         {{:sample, tag.data.data, timestamp}, processor}
+    end
+  end
+
+  defp handle_audio_tag(%ExAudioData{} = tag, timestamp, processor) do
+    cond do
+      not processor.audio? and tag.packet_type != :sequence_start ->
+        Logger.warning("Sequence header not received, dropping")
+        {nil, processor}
+
+      tag.packet_type == :coded_frames ->
+        {{:sample, tag.data, timestamp}, processor}
+
+      tag.packet_type == :sequence_start ->
+        {{:codec, tag.fourcc, tag.data}, %{processor | audio?: true}}
+
+      true ->
+        {nil, processor}
     end
   end
 

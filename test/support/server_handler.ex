@@ -4,7 +4,7 @@ defmodule ExRTMP.ServerHandler do
   use ExRTMP.Server.Handler
 
   alias MediaCodecs.H264
-  alias ExFLV.Tag.{ExVideoData, Serializer, VideoData, VideoData.AVC}
+  alias ExFLV.Tag.{AudioData, ExVideoData, Serializer, VideoData, VideoData.AVC}
   alias ExRTMP.Server.ClientSession
   alias MediaCodecs.H264.NaluSplitter
   alias MediaCodecs.H264.AccessUnitSplitter
@@ -25,7 +25,7 @@ defmodule ExRTMP.ServerHandler do
   @impl true
   def handle_play(%{name: "test"}, state) do
     pid = self()
-    spawn(fn -> send_video(pid, state[:fixture]) end)
+    spawn(fn -> send_media(pid, state[:fixture]) end)
     {:ok, state}
   end
 
@@ -40,32 +40,43 @@ defmodule ExRTMP.ServerHandler do
     state
   end
 
-  defp send_video(pid, fixture) do
+  defp send_media(pid, fixture) do
+    {codec, stream} = parse(fixture)
+
+    init_tag =
+      case codec do
+        :h264 -> h264_dcr_tag(@dcr)
+        :hevc -> hevc_dcr_tag(@hevc_dcr)
+        :pcma -> nil
+      end
+
+    if init_tag do
+      send_data(pid, 0, init_tag)
+    end
+
+    Enum.reduce(stream, 0, fn access_unit, timestamp ->
+      codec
+      |> create_tag(access_unit)
+      |> then(&send_data(pid, timestamp, &1))
+
+      timestamp + 50
+    end)
+  end
+
+  def parse(fixture) do
     codec =
       case Path.extname(fixture) do
         ".h264" -> :h264
         ".hevc" -> :hevc
+        ".pcma" -> :pcma
       end
 
-    dcr =
-      case codec do
-        :h264 -> h264_dcr_tag(@dcr)
-        :hevc -> hevc_dcr_tag(@hevc_dcr)
-      end
+    stream =
+      fixture
+      |> File.stream!(2048)
+      |> parse(codec)
 
-    ClientSession.send_video_data(pid, 0, Serializer.serialize(dcr))
-
-    fixture
-    |> File.stream!(2048)
-    |> parse(codec)
-    |> Enum.reduce(0, fn access_unit, timestamp ->
-      codec
-      |> create_tag(access_unit)
-      |> Serializer.serialize()
-      |> then(&ClientSession.send_video_data(pid, timestamp, &1))
-
-      timestamp + 50
-    end)
+    {codec, stream}
   end
 
   def parse(stream, :h264) do
@@ -75,6 +86,8 @@ defmodule ExRTMP.ServerHandler do
   def parse(stream, :hevc) do
     parse_h26x(stream, HevcNaluSplitter, HevcAccessUnitSplitter)
   end
+
+  def parse(stream, :pcma), do: stream
 
   defp parse_h26x(stream, splitter_mod, au_splitter_mod) do
     stream
@@ -133,5 +146,23 @@ defmodule ExRTMP.ServerHandler do
       composition_time_offset: 0,
       data: payload
     }
+  end
+
+  defp create_tag(:pcma, data) do
+    %AudioData{
+      sound_format: :g711_alaw,
+      sound_size: 0,
+      sound_rate: 1,
+      sound_type: :mono,
+      data: data
+    }
+  end
+
+  defp send_data(pid, timestamp, %AudioData{} = data) do
+    ClientSession.send_audio_data(pid, timestamp, Serializer.serialize(data))
+  end
+
+  defp send_data(pid, timestamp, data) do
+    ClientSession.send_video_data(pid, timestamp, Serializer.serialize(data))
   end
 end
