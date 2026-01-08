@@ -3,13 +3,13 @@ defmodule ExRTMP.ServerHandler do
 
   use ExRTMP.Server.Handler
 
-  alias MediaCodecs.H264
   alias ExFLV.Tag.{AudioData, ExVideoData, Serializer, VideoData, VideoData.AVC}
   alias ExRTMP.Server.ClientSession
-  alias MediaCodecs.H264.NaluSplitter
+  alias MediaCodecs.H264
   alias MediaCodecs.H264.AccessUnitSplitter
-  alias MediaCodecs.H265.NaluSplitter, as: HevcNaluSplitter
+  alias MediaCodecs.H264.NaluSplitter
   alias MediaCodecs.H265.AccessUnitSplitter, as: HevcAccessUnitSplitter
+  alias MediaCodecs.H265.NaluSplitter, as: HevcNaluSplitter
 
   @dcr <<1, 66, 192, 13, 255, 225, 0, 25, 103, 66, 192, 13, 171, 32, 40, 51, 243, 224, 34, 0, 0,
          3, 0, 2, 0, 0, 3, 0, 97, 30, 40, 84, 144, 1, 0, 4, 104, 206, 60, 128>>
