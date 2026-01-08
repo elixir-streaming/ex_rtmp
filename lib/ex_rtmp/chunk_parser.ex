@@ -12,8 +12,8 @@ defmodule ExRTMP.ChunkParser do
 
   defstruct [:unprocessed_data, :messages, :message_first_chunk, chunk_size: 128]
 
-  @spec new() :: t()
-  def new() do
+  @spec new :: t()
+  def new do
     %__MODULE__{
       unprocessed_data: <<>>,
       messages: %{},

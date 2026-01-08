@@ -9,7 +9,7 @@ defmodule ExRTMP.Message do
   alias __MODULE__.Command.NetStream.{DeleteStream, FCPublish, OnStatus, Play, Publish}
   alias __MODULE__.Metadata
   alias __MODULE__.UserControl.Event
-  alias ExRTMP.Chunk
+  alias ExRTMP.{Chunk, Message}
 
   @type stream_id :: non_neg_integer()
 
@@ -149,7 +149,7 @@ defmodule ExRTMP.Message do
 
     payload =
       if is_struct(message.payload),
-        do: ExRTMP.Message.Serializer.serialize(message.payload),
+        do: Message.Serializer.serialize(message.payload),
         else: message.payload
 
     payload = IO.iodata_to_binary(payload)

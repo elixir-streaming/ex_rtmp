@@ -3,9 +3,9 @@ defmodule ExRTMP.ChunkParserTest do
 
   alias ExRTMP.ChunkParser
   alias ExRTMP.Message
-  alias ExRTMP.Message.Command.NetStream.Publish
-  alias ExRTMP.Message.Command.NetConnection.CreateStream
   alias ExRTMP.Message.Command.NetConnection.Connect
+  alias ExRTMP.Message.Command.NetConnection.CreateStream
+  alias ExRTMP.Message.Command.NetStream.Publish
 
   test "Parse a stream of chunks into messages" do
     {messages, parser} =

@@ -32,8 +32,9 @@ defmodule ExRTMP.MixProject do
 
   defp deps do
     [
-      {:ex_flv, "~> 0.3.0"},
+      {:ex_flv, "~> 0.4.0"},
       {:ex_doc, "~> 0.38", only: :dev, runtime: false},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:media_codecs, "~> 0.8.0", only: :test}
     ]
   end
