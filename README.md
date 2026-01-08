@@ -18,7 +18,7 @@ end
 ```
 
 ## Enhanced RTMP
-Enhanced RTMP is supported to some extent, there's a lack of support for `Multitrack` and `ModEx` tags.
+Enhanced RTMP is supported to some extent, there's a lack of support for `Multitrack` and `ModEx` packet types for audio and video.
 
 ## Usage
 See the [examples](./examples) folder.
