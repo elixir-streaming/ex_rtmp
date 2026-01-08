@@ -46,3 +46,9 @@ A client connects to an RTMP server and saves the stream into an flv file.
 ```elixir
 elixir examples/read_to_flv.exs "rtmp://localhost:1935/live" test output.flv
 ```
+
+### `publish_mp4.exs`
+A client publishes an mp4 file to an RTMP server.
+```elixir
+elixir examples/publish_mp4.exs "input_file.mp4"
+```

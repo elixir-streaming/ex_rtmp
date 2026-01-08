@@ -5,8 +5,6 @@ defmodule ExRTMP.Client.State do
   alias ExRTMP.Client.MediaProcessor
   alias ExRTMP.Message
 
-  @compile {:inline, handle_media_message: 2}
-
   @default_window_ack_size 2_500_000
 
   @type command :: :connect | :create_stream | :play | :publish

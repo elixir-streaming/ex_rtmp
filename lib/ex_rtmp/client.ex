@@ -34,7 +34,7 @@ defmodule ExRTMP.Client do
   require Logger
 
   alias __MODULE__.{Config, State}
-  alias ExFLV.Tag.{AudioData, Serializer, VideoData}
+  alias ExFLV.Tag.{AudioData, ExAudioData, ExVideoData, Serializer, VideoData}
   alias ExRTMP.ChunkParser
   alias ExRTMP.Message
   alias ExRTMP.Message.Command.NetConnection.{Connect, CreateStream, Response}
@@ -75,6 +75,7 @@ defmodule ExRTMP.Client do
   """
   @spec start(start_options()) :: GenServer.on_start()
   def start(opts) do
+    opts = Keyword.put_new(opts, :receiver, self())
     GenServer.start(__MODULE__, opts, name: opts[:name])
   end
 
@@ -211,7 +212,19 @@ defmodule ExRTMP.Client do
   end
 
   @impl true
+  def handle_cast({:send_tag, timestamp, %ExVideoData{} = tag}, %{state: :publishing} = state) do
+    do_send_tag(state, @video_msg_type, tag, timestamp)
+    {:noreply, state}
+  end
+
+  @impl true
   def handle_cast({:send_tag, timestamp, %AudioData{} = tag}, %{state: :publishing} = state) do
+    do_send_tag(state, @audio_msg_type, tag, timestamp)
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_cast({:send_tag, timestamp, %ExAudioData{} = tag}, %{state: :publishing} = state) do
     do_send_tag(state, @audio_msg_type, tag, timestamp)
     {:noreply, state}
   end
