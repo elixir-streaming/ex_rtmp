@@ -90,6 +90,13 @@ defmodule ExRTMP.Server.ClientSession do
       media_processor: if(options[:demux], do: MediaProcessor.new())
     }
 
+    :ok =
+      :inet.setopts(state.socket,
+        send_timeout: 10_000,
+        send_timeout_close: true,
+        nodelay: true
+      )
+
     {:ok, state, {:continue, :handshake}}
   end
 
