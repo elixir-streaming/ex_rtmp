@@ -142,7 +142,7 @@ defmodule ExRTMP.Message do
     * `:chunk_size` - The size of each chunk (default: 128)
     * `:chunk_stream_id` - The chunk stream id to use (default: 2)
   """
-  @spec serialize(t(), keyword()) :: iodata()
+  @spec serialize(t(), keyword()) :: binary()
   def serialize(message, opts \\ []) do
     chunk_size = Keyword.get(opts, :chunk_size, 128)
     chunk_stream_id = Keyword.get(opts, :chunk_stream_id, 2)
@@ -166,14 +166,20 @@ defmodule ExRTMP.Message do
     }
 
     2..entries//1
-    |> Stream.map(fn idx ->
+    |> Enum.map(fn idx ->
       offset = (idx - 1) * chunk_size
       size = min(byte_size(payload) - offset, chunk_size)
       binary_part(payload, offset, size)
     end)
-    |> Stream.map(&%Chunk{payload: &1, stream_id: chunk_stream_id, fmt: 3})
-    |> Enum.map(&Chunk.serialize/1)
-    |> then(&[Chunk.serialize(first_chunk) | &1])
+    |> chunks_to_binary(chunk_stream_id, Chunk.serialize(first_chunk))
+  end
+
+  defp chunks_to_binary([], _chunk_stream_id, acc), do: acc
+
+  # we always use stream id smaller than 63 since we only allow
+  # one stream per client/session
+  defp chunks_to_binary([chunk | rest], stream_id, acc) do
+    chunks_to_binary(rest, stream_id, <<acc::binary, 3::2, stream_id::6, chunk::binary>>)
   end
 
   defp parse_payload(%__MODULE__{type: 1, payload: payload} = msg) do
