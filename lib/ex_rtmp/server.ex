@@ -85,22 +85,22 @@ defmodule ExRTMP.Server do
   def init(opts) do
     port = Keyword.get(opts, :port, @default_port)
 
-    {:ok, server_socket} = :gen_tcp.listen(port, [:binary, active: false, reuseaddr: true])
+    with {:ok, server_socket} <- :gen_tcp.listen(port, [:binary, active: false, reuseaddr: true]) do
+      state = %{
+        socket: server_socket,
+        pid: self(),
+        handler: opts[:handler] || raise("Handler module is required"),
+        handler_options: opts[:handler_options],
+        demux: Keyword.get(opts, :demux, true)
+      }
 
-    Logger.info("RTMP Server listening on port #{port}")
+      Logger.info("RTMP Server listening on port #{port}")
 
-    state = %{
-      socket: server_socket,
-      pid: self(),
-      handler: opts[:handler] || raise("Handler module is required"),
-      handler_options: opts[:handler_options],
-      demux: Keyword.get(opts, :demux, true)
-    }
+      Process.flag(:trap_exit, true)
+      listener = spawn_link(fn -> accept_client_connection(state) end)
 
-    Process.flag(:trap_exit, true)
-    listener = spawn_link(fn -> accept_client_connection(state) end)
-
-    {:ok, %{socket: server_socket, listener: listener}}
+      {:ok, %{socket: server_socket, listener: listener}}
+    end
   end
 
   @impl true
