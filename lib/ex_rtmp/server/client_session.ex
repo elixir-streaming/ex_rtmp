@@ -116,14 +116,18 @@ defmodule ExRTMP.Server.ClientSession do
 
   @impl true
   def handle_cast({:video_data, timestamp, data}, state) do
-    send_media(:video, state.socket, state.stream_id, timestamp, data)
-    {:noreply, state}
+    case send_media(:video, state.socket, state.stream_id, timestamp, data) do
+      :ok -> {:noreply, state}
+      {:error, reason} -> {:stop, reason, state}
+    end
   end
 
   @impl true
   def handle_cast({:audio_data, timestamp, data}, state) do
-    send_media(:audio, state.socket, state.stream_id, timestamp, data)
-    {:noreply, state}
+    case send_media(:audio, state.socket, state.stream_id, timestamp, data) do
+      :ok -> {:noreply, state}
+      {:error, reason} -> {:stop, reason, state}
+    end
   end
 
   @impl true
@@ -385,7 +389,7 @@ defmodule ExRTMP.Server.ClientSession do
       payload: data
     }
 
-    :ok = :gen_tcp.send(socket, Message.serialize(message, chunk_stream_id: chunk_stream_id))
+    :gen_tcp.send(socket, Message.serialize(message, chunk_stream_id: chunk_stream_id))
   end
 
   defp send_messages(state, []), do: state
