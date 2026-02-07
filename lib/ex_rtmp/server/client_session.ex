@@ -16,6 +16,7 @@ defmodule ExRTMP.Server.ClientSession do
   alias ExRTMP.Message.Metadata
 
   @default_acknowledgement_size 3_000_000
+  @default_chunk_size 128
 
   defmodule State do
     @moduledoc false
@@ -29,7 +30,8 @@ defmodule ExRTMP.Server.ClientSession do
             handler_state: any(),
             state: state(),
             stream_id: non_neg_integer() | nil,
-            media_processor: MediaProcessor.t() | nil
+            media_processor: MediaProcessor.t() | nil,
+            chunk_size: non_neg_integer()
           }
 
     @enforce_keys [:socket]
@@ -38,6 +40,7 @@ defmodule ExRTMP.Server.ClientSession do
                   :handler_mod,
                   :handler_state,
                   :media_processor,
+                  :chunk_size,
                   chunk_parser: ChunkParser.new(),
                   state: :init,
                   stream_id: nil
@@ -87,7 +90,8 @@ defmodule ExRTMP.Server.ClientSession do
       handler_mod: handler_mod,
       handler_state: handler_mod.init(options[:handler_options]),
       socket: options[:socket],
-      media_processor: if(options[:demux], do: MediaProcessor.new())
+      media_processor: if(options[:demux], do: MediaProcessor.new()),
+      chunk_size: options[:chunk_size] || @default_chunk_size
     }
 
     :ok =
@@ -105,6 +109,7 @@ defmodule ExRTMP.Server.ClientSession do
     case do_handle_handshake(state.socket) do
       :ok ->
         Logger.debug("RTMP Handshake successful")
+        set_chunk_size(state.socket, state.chunk_size)
         {:ok, data} = :gen_tcp.recv(state.socket, 0)
         :ok = :inet.setopts(state.socket, active: true)
         {:noreply, do_handle_data(state, data)}
@@ -116,7 +121,7 @@ defmodule ExRTMP.Server.ClientSession do
 
   @impl true
   def handle_cast({:video_data, timestamp, data}, state) do
-    case send_media(:video, state.socket, state.stream_id, timestamp, data) do
+    case send_media(:video, timestamp, data, state) do
       :ok -> {:noreply, state}
       {:error, reason} -> {:stop, reason, state}
     end
@@ -124,7 +129,7 @@ defmodule ExRTMP.Server.ClientSession do
 
   @impl true
   def handle_cast({:audio_data, timestamp, data}, state) do
-    case send_media(:audio, state.socket, state.stream_id, timestamp, data) do
+    case send_media(:audio, timestamp, data, state) do
       :ok -> {:noreply, state}
       {:error, reason} -> {:stop, reason, state}
     end
@@ -133,7 +138,7 @@ defmodule ExRTMP.Server.ClientSession do
   @impl true
   def handle_cast({:metadata, data}, state) do
     message = Message.metadata(data, state.stream_id)
-    :ok = :gen_tcp.send(state.socket, Message.serialize(message))
+    :ok = :gen_tcp.send(state.socket, Message.serialize(message, state.chunk_size))
     {:noreply, state}
   end
 
@@ -171,6 +176,13 @@ defmodule ExRTMP.Server.ClientSession do
     else
       _res -> :error
     end
+  end
+
+  defp set_chunk_size(_socket, @default_chunk_size), do: :ok
+
+  defp set_chunk_size(socket, chunk_size) do
+    message = Message.chunk_size(chunk_size)
+    :gen_tcp.send(socket, Message.serialize(message))
   end
 
   defp do_handle_data(state, data) do
@@ -375,21 +387,24 @@ defmodule ExRTMP.Server.ClientSession do
     end
   end
 
-  defp send_media(media, socket, stream_id, timestamp, data) do
+  defp send_media(media, timestamp, data, state) do
     {type, chunk_stream_id} =
       case media do
-        :audio -> {8, stream_id * 3}
-        :video -> {9, stream_id * 3 + 1}
+        :audio -> {8, state.stream_id * 3}
+        :video -> {9, state.stream_id * 3 + 1}
       end
 
     message = %Message{
       type: type,
       timestamp: timestamp,
-      stream_id: stream_id,
+      stream_id: state.stream_id,
       payload: data
     }
 
-    :gen_tcp.send(socket, Message.serialize(message, chunk_stream_id: chunk_stream_id))
+    :gen_tcp.send(
+      state.socket,
+      Message.serialize(message, state.chunk_size, chunk_stream_id: chunk_stream_id)
+    )
   end
 
   defp send_messages(state, []), do: state

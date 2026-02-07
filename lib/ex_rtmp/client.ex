@@ -42,6 +42,7 @@ defmodule ExRTMP.Client do
   alias ExRTMP.Message.UserControl.Event
 
   @default_buffer_size 2_000_000
+  @default_chunk_size 1024
   @audio_msg_type 8
   @video_msg_type 9
 
@@ -49,7 +50,8 @@ defmodule ExRTMP.Client do
           {:uri, String.t()},
           {:stream_key, String.t()},
           {:name, GenServer.name()},
-          {:receiver, Process.dest()}
+          {:receiver, Process.dest()},
+          {:chunk_size, non_neg_integer()}
         ]
 
   @doc """
@@ -57,10 +59,10 @@ defmodule ExRTMP.Client do
 
   ## Options
     * `:uri` - The RTMP server URI to connect to. This option is required.
-
     * `:stream_key` - The stream key. This option is required.
-
     * `:name` - The name to register the client process. This option is optional.
+    * `:receiver` - The process that will receive the media data when playing a stream. This option is optional and defaults to the calling process.
+    * `:chunk_size` - The RTMP chunk size to use for data sent to the server. This option is optional.
   """
   @spec start_link(start_options()) :: GenServer.on_start()
   def start_link(opts) do
@@ -134,7 +136,15 @@ defmodule ExRTMP.Client do
   @impl true
   def init(opts) do
     opts = Config.validate!(opts)
-    state = %State{uri: opts[:uri], stream_key: opts[:stream_key], receiver: opts[:receiver]}
+
+    state =
+      %State{
+        uri: opts[:uri],
+        stream_key: opts[:stream_key],
+        receiver: opts[:receiver],
+        chunk_size: opts[:chunk_size] || @default_chunk_size
+      }
+
     {:ok, state}
   end
 
@@ -162,7 +172,7 @@ defmodule ExRTMP.Client do
     state.stream_key
     |> Play.new()
     |> Message.command(state.stream_id)
-    |> send_message(state.socket)
+    |> send_message(state)
 
     {:noreply, %{state | pending_action: :play, pending_peer: from}}
   end
@@ -177,7 +187,7 @@ defmodule ExRTMP.Client do
     state.stream_key
     |> Publish.new("live")
     |> Message.command(state.stream_id)
-    |> send_message(state.socket)
+    |> send_message(state)
 
     {:noreply, %{state | pending_action: :publish, pending_peer: from}}
   end
@@ -264,7 +274,8 @@ defmodule ExRTMP.Client do
             }
           }
 
-        send_message(Message.command(connect), state.socket)
+        send_message(Message.chunk_size(state.chunk_size), state)
+        send_message(Message.command(connect), state)
         {:noreply, %{state | pending_peer: from, pending_action: :connect}}
 
       error ->
@@ -292,7 +303,7 @@ defmodule ExRTMP.Client do
 
   defp create_stream(state) do
     ts_id = state.next_ts_id
-    %CreateStream{transaction_id: ts_id} |> Message.command() |> send_message(state.socket)
+    %CreateStream{transaction_id: ts_id} |> Message.command() |> send_message(state)
     %{state | pending_action: :create_stream, next_ts_id: ts_id + 1}
   end
 
@@ -303,7 +314,7 @@ defmodule ExRTMP.Client do
       %Event{type: :ping_request, data: timestamp} ->
         timestamp
         |> Message.ping_response()
-        |> send_message(state.socket)
+        |> send_message(state)
 
         state
 
@@ -424,7 +435,7 @@ defmodule ExRTMP.Client do
 
   defp do_delete_stream(stream_id, state) do
     if stream_id do
-      DeleteStream.new(stream_id) |> Message.command(stream_id) |> send_message(state.socket)
+      DeleteStream.new(stream_id) |> Message.command(stream_id) |> send_message(state)
     end
 
     :ok = :gen_tcp.close(state.socket)
@@ -439,7 +450,7 @@ defmodule ExRTMP.Client do
         timestamp: timestamp
       )
 
-    send_message(message, state.socket)
+    send_message(message, state)
   end
 
   defp handle_play_resp_code("NetStream.Play.Start"), do: :ok
@@ -447,7 +458,7 @@ defmodule ExRTMP.Client do
   defp handle_play_resp_code("NetStream.Play.StreamNotFound"), do: {:error, "Stream not found"}
   defp handle_play_resp_code("NetStream.Play.Failed"), do: {:error, "Play failed"}
 
-  defp send_message(message, socket) do
-    :ok = :gen_tcp.send(socket, Message.serialize(message))
+  defp send_message(message, state) do
+    :ok = :gen_tcp.send(state.socket, Message.serialize(message, state.chunk_size))
   end
 end

@@ -11,6 +11,8 @@ defmodule ExRTMP.Message do
   alias __MODULE__.UserControl.Event
   alias ExRTMP.{Chunk, Message}
 
+  @default_chunk_size 128
+
   @type stream_id :: non_neg_integer()
 
   @type t :: %__MODULE__{
@@ -139,12 +141,10 @@ defmodule ExRTMP.Message do
 
   The following options may be provided:
 
-    * `:chunk_size` - The size of each chunk (default: 128)
     * `:chunk_stream_id` - The chunk stream id to use (default: 2)
   """
-  @spec serialize(t(), keyword()) :: binary()
-  def serialize(message, opts \\ []) do
-    chunk_size = Keyword.get(opts, :chunk_size, 128)
+  @spec serialize(t(), non_neg_integer(), keyword()) :: binary()
+  def serialize(message, chunk_size \\ @default_chunk_size, opts \\ []) do
     chunk_stream_id = Keyword.get(opts, :chunk_stream_id, 2)
 
     payload =
