@@ -100,7 +100,7 @@ defmodule Publisher do
     %ExVideoData{
       frame_type: :keyframe,
       packet_type: :sequence_start,
-      fourcc: :hvc1,
+      codec_id: :hvc1,
       data: dcr
     }
   end
@@ -125,7 +125,7 @@ defmodule Publisher do
     %ExVideoData{
       frame_type: if(keyframe?, do: :keyframe, else: :interframe),
       packet_type: :coded_frames,
-      fourcc: :hvc1,
+      codec_id: :hvc1,
       composition_time_offset: ct,
       data: sample.payload
     }

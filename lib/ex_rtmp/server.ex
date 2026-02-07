@@ -29,7 +29,8 @@ defmodule ExRTMP.Server do
           {:port, :inet.port_number()},
           {:handler, module()},
           {:handler_options, any()},
-          {:demux, boolean()}
+          {:demux, boolean()},
+          {:chunk_size, non_neg_integer()}
         ]
 
   @default_port 1935
@@ -59,6 +60,8 @@ defmodule ExRTMP.Server do
 
     * `demux` - Whether the server will demux the incoming RTMP streams into
       audio and video frames. Defaults to `true`. See [Handling Media](#module-handling-media) below.
+
+    * `chunk_size` - The RTMP chunk size to use for data sent to the clients.
   """
   @spec start_link(start_options()) :: GenServer.on_start()
   def start_link(opts) do
@@ -91,7 +94,8 @@ defmodule ExRTMP.Server do
         pid: self(),
         handler: opts[:handler] || raise("Handler module is required"),
         handler_options: opts[:handler_options],
-        demux: Keyword.get(opts, :demux, true)
+        demux: Keyword.get(opts, :demux, true),
+        chunk_size: opts[:chunk_size]
       }
 
       Logger.info("RTMP Server listening on port #{port}")
@@ -139,7 +143,8 @@ defmodule ExRTMP.Server do
             socket: client_socket,
             handler: state.handler,
             handler_options: state.handler_options,
-            demux: state.demux
+            demux: state.demux,
+            chunk_size: state.chunk_size
           )
 
         :ok = :gen_tcp.controlling_process(client_socket, pid)

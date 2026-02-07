@@ -22,7 +22,8 @@ defmodule ExRTMP.Client.State do
           window_ack_size: non_neg_integer(),
           stream_id: Message.stream_id() | nil,
           state: state(),
-          media_processor: MediaProcessor.t() | nil
+          media_processor: MediaProcessor.t() | nil,
+          chunk_size: non_neg_integer() | nil
         }
 
   @enforce_keys [:uri, :stream_key]
@@ -34,6 +35,7 @@ defmodule ExRTMP.Client.State do
                 :receiver,
                 :stream_id,
                 :media_processor,
+                :chunk_size,
                 state: :init,
                 chunk_parser: ChunkParser.new(),
                 next_ts_id: 2,
@@ -56,6 +58,11 @@ defmodule ExRTMP.Client.State do
   @doc false
   @spec reset(t()) :: t()
   def reset(state) do
-    %__MODULE__{uri: state.uri, stream_key: state.stream_key, receiver: state.receiver}
+    %__MODULE__{
+      uri: state.uri,
+      stream_key: state.stream_key,
+      receiver: state.receiver,
+      chunk_size: state.chunk_size
+    }
   end
 end
