@@ -1,8 +1,8 @@
 defmodule ExRTMP.Message.Command.Generic do
   @moduledoc false
 
-  # This module describe OPTIONAL command message that can be safely ignore. If
-  # for some service requires to handle these messages, we'll implement them in the future.
+  # This module describe OPTIONAL command message that can be safely ignored. If
+  # some service requires to handle/send these messages, we'll implement them.
 
   @type t :: %__MODULE__{
           name: String.t(),
