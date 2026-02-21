@@ -5,6 +5,7 @@ defmodule ExRTMP.Message do
 
   require Logger
 
+  alias __MODULE__.Command.Generic
   alias __MODULE__.Command.NetConnection.{Connect, CreateStream, Response}
   alias __MODULE__.Command.NetStream.{DeleteStream, FCPublish, OnStatus, Play, Publish}
   alias __MODULE__.Metadata
@@ -245,16 +246,6 @@ defmodule ExRTMP.Message do
     %CreateStream{transaction_id: transaction_id}
   end
 
-  defp handle_message_payload([result, transaction_id, command_object, data])
-       when result in ["_result", "_error"] do
-    %Response{
-      result: result,
-      transaction_id: trunc(transaction_id),
-      command_object: command_object,
-      data: data
-    }
-  end
-
   defp handle_message_payload(["publish", _txid, nil, name, type]), do: Publish.new(name, type)
   defp handle_message_payload(["onStatus", _txid, nil, info]), do: %OnStatus{info: info}
 
@@ -270,11 +261,27 @@ defmodule ExRTMP.Message do
     Play.new(name, play_opts)
   end
 
-  defp handle_message_payload(["deleteStream", _txid, nil, stream_id]),
-    do: DeleteStream.new(stream_id)
+  defp handle_message_payload(["deleteStream", _txid, nil, stream_id]) do
+    DeleteStream.new(stream_id)
+  end
 
-  defp handle_message_payload(["FCPublish", transaction_id, nil, name]),
-    do: FCPublish.new(transaction_id, name)
+  defp handle_message_payload(["FCPublish", transaction_id, nil, name]) do
+    FCPublish.new(transaction_id, name)
+  end
+
+  defp handle_message_payload([result, transaction_id, command_object, data])
+       when result in ["_result", "_error"] do
+    %Response{
+      result: result,
+      transaction_id: trunc(transaction_id),
+      command_object: command_object,
+      data: data
+    }
+  end
+
+  defp handle_message_payload([name, transaction_id, nil, params]) when is_binary(name) do
+    Generic.new(name, transaction_id, params)
+  end
 
   defp handle_message_payload(other) do
     Logger.warning("Unknown command: #{inspect(other)}")

@@ -10,7 +10,7 @@ defmodule ExRTMP.Server.ClientSession do
   alias ExRTMP.ChunkParser
   alias ExRTMP.Client.MediaProcessor
   alias ExRTMP.Message
-  alias ExRTMP.Message.Command.NetConnection
+  alias ExRTMP.Message.Command.{Generic, NetConnection}
   alias ExRTMP.Message.Command.NetConnection.{CreateStream, Response}
   alias ExRTMP.Message.Command.NetStream.{DeleteStream, FCPublish, OnStatus, Play, Publish}
   alias ExRTMP.Message.Metadata
@@ -277,6 +277,10 @@ defmodule ExRTMP.Server.ClientSession do
 
         %Play{} ->
           handle_play_message(message.payload, message.stream_id, state)
+
+        %Generic{} ->
+          Logger.debug("Ignore generic message: #{inspect(message.payload)}")
+          {[], state}
 
         _other ->
           Logger.warning("Unknown command message: #{inspect(message.payload)}")
